@@ -1,0 +1,37 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Secrets and local config
+.env
+*.env.local
+backend/.env
+
+# Generated data and model artifacts (reproducible with the training command)
+datasets/raw/*
+datasets/processed/*
+!datasets/raw/.gitkeep
+!datasets/processed/.gitkeep
+models/*
+!models/.gitkeep
+
+# Node
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

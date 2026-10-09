@@ -1,0 +1,19 @@
+# Runtime dependencies for the API (versions verified together; see docs/progress.md)
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg[binary]==3.3.6
+pydantic==2.14.0
+pydantic-settings==2.15.0
+email-validator==2.3.0
+PyJWT==2.15.1
+bcrypt==5.0.0
+python-multipart==0.0.32
+# ML runtime (also used by ml/ package)
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+xgboost==3.4.1
+shap==0.52.0
+joblib==1.6.0

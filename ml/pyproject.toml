@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maintenix-ml"
+version = "1.0.0"
+description = "Maintenix AI: data simulation, validation, features, models and registry"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<4",
+  "scikit-learn>=1.5,<2",
+  "xgboost>=2.1,<4",
+  "shap>=0.46,<1",
+  "joblib>=1.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["maintenix_ml*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
