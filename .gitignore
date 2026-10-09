@@ -19,6 +19,7 @@ datasets/raw/*
 datasets/processed/*
 !datasets/raw/.gitkeep
 !datasets/processed/.gitkeep
+!datasets/samples/
 models/*
 !models/.gitkeep
 

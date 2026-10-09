@@ -101,3 +101,11 @@ def test_cmapss_adapter_on_format_fixture(tmp_path):
     assert (df["data_source"] == "imported").all()
     assert isinstance(df["timestamp"].iloc[0], pd.Timestamp) or df["timestamp"].iloc[0].tzinfo is not None
     assert np.isfinite(df["s2"]).all()
+
+
+def test_evaluate_reproduces_stored_metrics(trained):
+    from maintenix_ml.evaluate import evaluate_model
+
+    for meta in list_metadata(trained):
+        result = evaluate_model(trained, meta)
+        assert result["reproduced"], result
