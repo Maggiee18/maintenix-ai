@@ -1,0 +1,68 @@
+# docker compose up --build
+# Required variables are read from .env (copy .env.example). Compose refuses to start without them.
+name: maintenix
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-maintenix}
+      POSTGRES_USER: ${POSTGRES_USER:-maintenix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    image: maintenix-backend:local
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maintenix}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-maintenix}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?set BOOTSTRAP_ADMIN_PASSWORD in .env}
+      SEED_DEMO: ${SEED_DEMO:-true}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
+      TRAIN_ON_START: ${TRAIN_ON_START:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    volumes:
+      - models:/app/models
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: { context: ./frontend }
+    image: maintenix-frontend:local
+    depends_on:
+      backend: { condition: service_healthy }
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped
+
+  # Optional: keeps SIMULATED equipment receiving hourly readings.
+  #   docker compose --profile simulator up -d
+  simulator:
+    image: maintenix-backend:local
+    profiles: ["simulator"]
+    depends_on:
+      backend: { condition: service_healthy }
+    entrypoint: ["python", "/app/scripts/stream_simulator.py", "--api", "http://backend:8000", "--interval", "300"]
+    environment:
+      MAINTENIX_EMAIL: engineer@example.com
+      MAINTENIX_PASSWORD: ${DEMO_USER_PASSWORD:?set DEMO_USER_PASSWORD to run the simulator}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  models:

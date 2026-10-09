@@ -35,3 +35,4 @@ tests/e2e/playwright-report/
 .DS_Store
 .idea/
 .vscode/
+tests/e2e/node_modules/

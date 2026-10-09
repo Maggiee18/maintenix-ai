@@ -102,8 +102,16 @@ class EquipmentOut(BaseModel):
     updated_at: datetime
 
 
+class SimulationInfo(BaseModel):
+    """Present only for SIMULATED equipment; lets the demo stream simulator continue the trajectory."""
+
+    seed: int
+    first_reading_index: int
+
+
 class EquipmentDetail(EquipmentOut):
     type_info: EquipmentTypeOut
+    simulation: SimulationInfo | None = None
     latest_reading: dict[str, Any] | None
     reading_count: int
 

@@ -14,7 +14,7 @@ from ...core.config import get_settings
 from ...core.errors import AppError, ValidationFailed
 from ...models import entities as m
 from ...schemas.common import Page
-from ...schemas.sensors import BatchIngest, IngestReport, ReadingOut, SeriesOut, SeriesPoint, SingleIngest
+from ...schemas.sensors import BatchIngest, IngestIssue, IngestReport, ReadingOut, SeriesOut, SeriesPoint, SingleIngest
 from ...services import inference, telemetry
 from ..deps import DB, Current, EngineerUser
 from .equipment import get_equipment
@@ -100,8 +100,8 @@ async def upload_csv(
         eq = known.get(code)
         if eq is None:
             total.rejected_rows += len(group)
-            total.errors += [{"row": int(r), "column": "equipment_code", "code": "unknown_equipment",
-                              "message": f"Unknown equipment code '{code}'"} for r in group["_row"][:50]]  # type: ignore[misc]
+            total.errors += [IngestIssue(row=int(r), column="equipment_code", code="unknown_equipment",
+                                         message=f"Unknown equipment code '{code}'") for r in group["_row"][:50]]
             continue
         spec = get_spec(eq.equipment_type.key)
         cols = ["unit_id", "timestamp", "operating_mode", "operating_hours", *spec.sensor_names]
@@ -117,7 +117,7 @@ async def upload_csv(
                 e = dict(e)
                 if e.get("row") is not None:
                     e["row"] = int(group["_row"].iloc[e["row"]])
-                total.errors.append(e)  # type: ignore[arg-type]
+                total.errors.append(IngestIssue(**e))
             continue
         total.accepted_rows += rep["accepted_rows"]
         total.rejected_rows += rep["rejected_rows"]
@@ -127,7 +127,7 @@ async def upload_csv(
             for e in rep[key]:
                 if e.get("row") is not None:
                     e["row"] = int(group["_row"].iloc[e["row"]])
-                getattr(total, key).append(e)
+                getattr(total, key).append(IngestIssue(**e))
         total.equipment_ids.append(eq.id)
         if run_inference and rep["accepted_rows"]:
             total.predictions += _prediction_summary(inference.run_for_equipment(db, eq, triggered_by="ingestion"))

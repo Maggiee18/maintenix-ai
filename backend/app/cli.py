@@ -93,7 +93,7 @@ def cmd_seed_demo(a: argparse.Namespace) -> int:
             eq = m.Equipment(code=code, name=name, equipment_type_id=types[etype].id, location=loc, criticality=crit,
                              manufacturer="Simulated Co.", model_number=f"SIM-{etype[:3].upper()}", serial_number=f"SIM{seed}",
                              install_date=date(2021, 3, 1), data_source="simulated", simulation_seed=seed,
-                             simulation_offset=end_idx, status="operational")
+                             simulation_offset=end_idx - len(seg) + 1, status="operational")
             db.add(eq)
             db.commit()
             frame = seg[["timestamp", "operating_hours", "operating_mode", *[s.name for s in types[etype].sensors]]].copy()

@@ -18,6 +18,7 @@ from ...schemas.equipment import (
     EquipmentUpdate,
     HealthHistoryOut,
     HealthHistoryPoint,
+    SimulationInfo,
     StatusChange,
 )
 from ...services import audit, telemetry
@@ -111,7 +112,10 @@ def equipment_detail(equipment_id: int, db: DB, _: Current) -> EquipmentDetail:
 
     eq = get_equipment(db, equipment_id)
     base = equipment_out(eq, open_alert_counts(db, [eq.id]).get(eq.id, 0))
-    return EquipmentDetail(**base.model_dump(), type_info=ETO.model_validate(eq.equipment_type),
+    sim = None
+    if eq.data_source == "simulated" and eq.simulation_seed is not None and eq.simulation_offset is not None:
+        sim = SimulationInfo(seed=eq.simulation_seed, first_reading_index=eq.simulation_offset)
+    return EquipmentDetail(**base.model_dump(), type_info=ETO.model_validate(eq.equipment_type), simulation=sim,
                            latest_reading=telemetry.latest_reading(db, eq), reading_count=telemetry.reading_count(db, eq.id))
 
 

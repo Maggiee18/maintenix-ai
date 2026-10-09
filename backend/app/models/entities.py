@@ -152,7 +152,8 @@ class Equipment(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="operational", index=True)
     criticality: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
     data_source: Mapped[str] = mapped_column(String(16), nullable=False, default="api")
-    # Only used by the demo stream simulator to continue a SIMULATED trajectory.
+    # Only used by the demo stream simulator to continue a SIMULATED trajectory:
+    # simulation_offset is the trajectory index of the first stored reading.
     simulation_seed: Mapped[int | None] = mapped_column(BigInteger)
     simulation_offset: Mapped[int | None] = mapped_column(Integer)
     last_maintenance_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

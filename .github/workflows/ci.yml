@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-ml:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: maintenix
+          POSTGRES_PASSWORD: maintenix_ci
+          POSTGRES_DB: maintenix_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U maintenix" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://maintenix:maintenix_ci@localhost:5432/maintenix_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install
+        run: |
+          pip install -r backend/requirements-dev.txt
+          pip install --no-deps -e ml
+      - name: Lint
+        run: |
+          ruff check backend/app backend/tests --config backend/pyproject.toml
+          ruff check ml scripts --config backend/pyproject.toml
+      - name: Type check
+        working-directory: backend
+        run: mypy app
+      - name: ML tests
+        working-directory: ml
+        run: pytest -q
+      - name: Backend tests (unit, API, integration; migrations applied to a fresh DB)
+        working-directory: backend
+        run: pytest -q --cov=app --cov-report=term
+      - name: Migrations are in sync with models
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg://maintenix:maintenix_ci@localhost:5432/maintenix_test
+          JWT_SECRET: ci-only-secret-value-0123456789
+        run: alembic check
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    # Full stack in Docker, seeded with the SIMULATED demo fleet, then Playwright + the API smoke test.
+    needs: [backend-ml, frontend]
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci_db_password
+      JWT_SECRET: ci-jwt-secret-0123456789-abcdefghijklmnop
+      BOOTSTRAP_ADMIN_PASSWORD: Ci-admin-pass-1
+      DEMO_USER_PASSWORD: Ci-demo-pass-1
+      SEED_DEMO: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        run: docker compose up --build -d --wait --wait-timeout 900
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: API smoke test
+        run: |
+          pip install httpx -r backend/requirements.txt
+          pip install --no-deps ./ml
+          MAINTENIX_ADMIN_PASSWORD=$BOOTSTRAP_ADMIN_PASSWORD python scripts/smoke_test.py --api http://localhost:8000
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Playwright
+        working-directory: tests/e2e
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          E2E_BASE_URL=http://localhost:8080 E2E_ADMIN_PASSWORD=$BOOTSTRAP_ADMIN_PASSWORD E2E_DEMO_PASSWORD=$DEMO_USER_PASSWORD npx playwright test
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail 200

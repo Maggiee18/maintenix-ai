@@ -84,7 +84,10 @@ def high_risk(db: DB, _: Current, limit: int = Query(10, ge=1, le=50)) -> list[d
                       .where(m.Equipment.status != "decommissioned", P.status == "ok",
                              or_(P.risk_level.in_(("elevated", "high")), P.is_anomaly.is_(True)))
                       .order_by(P.failure_probability.desc().nulls_last()).limit(limit)).unique().all()
-    return [equipment_out(e).model_dump() for e in rows]
+    counts = dict(db.execute(select(m.Alert.equipment_id, func.count()).where(
+        m.Alert.equipment_id.in_([e.id for e in rows]), m.Alert.status.in_(("open", "acknowledged")))
+        .group_by(m.Alert.equipment_id)).tuples().all()) if rows else {}
+    return [equipment_out(e, counts.get(e.id, 0)).model_dump() for e in rows]
 
 
 @router.get("/prediction-trends", summary="Daily mean failure probability and counts of elevated/high predictions")

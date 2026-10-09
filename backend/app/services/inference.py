@@ -105,7 +105,9 @@ def run_for_equipment(
     )
     db.add(pred)
     db.flush()
-    if pred.is_anomaly:
+    already = pred.is_anomaly and db.scalar(select(m.AnomalyEvent.id).where(
+        m.AnomalyEvent.equipment_id == equipment.id, m.AnomalyEvent.detected_at == pred.as_of))
+    if pred.is_anomaly and not already:  # re-running on the same window does not duplicate the event
         db.add(m.AnomalyEvent(equipment_id=equipment.id, prediction_id=pred.id, detected_at=pred.as_of,
                               score=pred.anomaly_score or 0.0, threshold=pred.anomaly_threshold or 0.0,
                               sensors=[d for d in (result.sensor_deviations or [])][:8]))

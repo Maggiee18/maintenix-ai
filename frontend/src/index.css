@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Colour tokens (RGB triplets so Tailwind can apply opacity). */
+:root {
+  --bg: 244 246 249;
+  --surface: 255 255 255;
+  --muted: 238 241 245;
+  --border: 222 227 234;
+  --fg: 23 32 46;
+  --subtle: 96 108 126;
+  --primary: 31 95 174;
+  --primary-fg: 255 255 255;
+  --ok: 22 135 90;
+  --watch: 37 112 186;
+  --warn: 196 120 10;
+  --danger: 200 50 50;
+  --unknown: 128 138 152;
+  --series-1: 42 120 214; --series-2: 235 104 52; --series-3: 27 175 122; --series-4: 237 161 0;
+  --series-5: 232 123 164; --series-6: 0 131 0; --series-7: 74 58 167; --series-8: 227 73 72;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 14 18 25;
+    --surface: 22 28 37;
+    --muted: 30 37 48;
+    --border: 44 53 66;
+    --fg: 229 234 241;
+    --subtle: 150 162 179;
+    --primary: 94 156 230;
+    --primary-fg: 10 16 24;
+    --ok: 64 190 135;
+    --watch: 103 166 234;
+    --warn: 232 166 62;
+    --danger: 238 104 104;
+    --unknown: 140 150 165;
+    --series-1: 57 135 229; --series-2: 217 89 38; --series-3: 25 158 112; --series-4: 201 133 0;
+    --series-5: 213 81 129; --series-6: 0 131 0; --series-7: 144 133 233; --series-8: 230 103 103;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: 14 18 25;
+  --surface: 22 28 37;
+  --muted: 30 37 48;
+  --border: 44 53 66;
+  --fg: 229 234 241;
+  --subtle: 150 162 179;
+  --primary: 94 156 230;
+  --primary-fg: 10 16 24;
+  --ok: 64 190 135;
+  --watch: 103 166 234;
+  --warn: 232 166 62;
+  --danger: 238 104 104;
+  --unknown: 140 150 165;
+  --series-1: 57 135 229; --series-2: 217 89 38; --series-3: 25 158 112; --series-4: 201 133 0;
+  --series-5: 213 81 129; --series-6: 0 131 0; --series-7: 144 133 233; --series-8: 230 103 103;
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+body { @apply bg-bg text-fg font-sans antialiased; font-feature-settings: "tnum" 1; }
+
+@layer components {
+  .card { @apply rounded-lg border border-border bg-surface; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition
+    focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-primary text-primary-fg hover:bg-primary/90; }
+  .btn-secondary { @apply btn border border-border bg-surface text-fg hover:bg-muted; }
+  .btn-danger { @apply btn bg-danger text-white hover:bg-danger/90; }
+  .btn-ghost { @apply btn text-subtle hover:bg-muted hover:text-fg; }
+  .input { @apply w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-fg placeholder:text-subtle
+    focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60; }
+  .label { @apply mb-1 block text-xs font-medium text-subtle; }
+  .th { @apply px-3 py-2 text-left text-2xs font-semibold uppercase tracking-wide text-subtle; }
+  .td { @apply px-3 py-2 text-sm; }
+}
