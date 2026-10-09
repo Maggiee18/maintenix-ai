@@ -19,3 +19,10 @@ describe("formatters", () => {
     expect(pct(0.1234, 1)).toBe("12.3%");
   });
 });
+
+describe("rul units", () => {
+  it("uses flight cycles for turbofans", () => {
+    expect(rulText(30.2, "ok", 125, "cycles")).toBe("30 cycles");
+    expect(rulText(125, "ok", 125, "cycles")).toBe("≥ 125 cycles");
+  });
+});

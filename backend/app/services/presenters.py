@@ -24,7 +24,8 @@ def equipment_out(e: m.Equipment, open_alerts: int = 0) -> EquipmentOut:
         last_maintenance_at=e.last_maintenance_at, open_alerts=open_alerts, created_at=e.created_at, updated_at=e.updated_at,
         latest_prediction=LatestPredictionBrief(
             id=p.id, as_of=p.as_of, status=p.status, failure_probability=p.failure_probability, risk_level=p.risk_level,
-            is_anomaly=p.is_anomaly, rul_hours=p.rul_hours, rul_status=p.rul_status) if p else None,
+            is_anomaly=p.is_anomaly, rul_hours=p.rul_hours, rul_status=p.rul_status,
+            rul_unit=m.time_unit(e.equipment_type.key)) if p else None,
     )
 
 

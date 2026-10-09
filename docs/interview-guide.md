@@ -4,7 +4,7 @@ Short, honest answers to the questions this project tends to raise. Numbers refe
 
 ## 1. The 30 second pitch
 
-Maintenix AI watches equipment sensor data, estimates the chance each machine fails in the next 48 hours, flags unusual behaviour, estimates remaining life where the data supports it, and turns that into alerts and maintenance work orders. It is a full stack: FastAPI and PostgreSQL behind a React dashboard, with a separate ML package that trains per equipment type models and a registry the API loads from. The demo runs on clearly labelled simulated data because I could not use real plant data.
+Maintenix AI watches equipment sensor data, estimates the chance each machine fails in the next 48 hours, flags unusual behaviour, estimates remaining life where the data supports it, and turns that into alerts and maintenance work orders. It is a full stack: FastAPI and PostgreSQL behind a React dashboard, with a separate ML package that trains per equipment type models and a registry the API loads from. It is validated on the original NASA C-MAPSS turbofan dataset (RUL RMSE 11.85 cycles on the official test set), and the demo mixes eight real C-MAPSS engines with a clearly labelled simulated fleet of pumps, motors and compressors.
 
 ## 2. Why each technology
 
@@ -71,6 +71,6 @@ Validation errors come back as 422 with row level details (an upload with 3 bad 
 
 ## 11. Honest limitations
 
-* All demo data and every reported metric come from the built-in simulator, which is cleaner than reality. A linear model winning is a sign the simulated signal is simple.
-* C-MAPSS support is implemented and unit tested on a format fixture, but the dataset could not be downloaded in the build environment, so there are no C-MAPSS results.
+* Pump, motor and compressor data come from the built-in simulator, which is cleaner than reality. A linear model winning there is a sign the simulated signal is simple.
+* The real data evidence is NASA C-MAPSS FD001: RUL RMSE 11.85 cycles on the official test set (95 of 100 engines; 5 short engines skipped, not padded). That is still a simulation benchmark from NASA, one operating condition and one fault mode, not plant data.
 * The Docker images were not built in the build environment (Docker Hub was blocked); CI builds them.

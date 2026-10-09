@@ -109,3 +109,16 @@ def test_evaluate_reproduces_stored_metrics(trained):
     for meta in list_metadata(trained):
         result = evaluate_model(trained, meta)
         assert result["reproduced"], result
+
+
+_REAL = Path(__file__).resolve().parents[2] / "datasets" / "raw" / "cmapss"
+
+
+@pytest.mark.skipif(not (_REAL / "train_FD001.txt").exists(), reason="real C-MAPSS not downloaded")
+def test_real_cmapss_fd001_loads_and_validates():
+    from maintenix_ml.validation import validate_readings
+
+    df = load_cmapss_train(_REAL, "FD001")
+    assert df["unit_id"].nunique() == 100 and len(df) == 20631
+    assert df["gt_failure_event"].sum() == 100
+    assert validate_readings(df, get_spec("turbofan_engine")).rejected_rows == 0

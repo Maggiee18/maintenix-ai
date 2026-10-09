@@ -50,8 +50,9 @@ def recommendation(pred: m.PredictionResult) -> str | None:
     rul = ""
     if pred.rul_status == "ok" and pred.rul_hours is not None and pred.rul_typical_error_hours:
         at_cap = bool(pred.rul_cap_hours and pred.rul_hours >= pred.rul_cap_hours - 0.5)
-        rul = (f" Estimated remaining useful life about {pred.rul_hours:.0f} h{' or more' if at_cap else ''}"
-               f" (typical error ±{pred.rul_typical_error_hours:.0f} h).")
+        u = pred.rul_unit
+        rul = (f" Estimated remaining useful life about {pred.rul_hours:.0f} {u}{' or more' if at_cap else ''}"
+               f" (typical error ±{pred.rul_typical_error_hours:.0f} {u}).")
     if pred.risk_level == "high":
         return f"High failure risk. Plan an inspection as soon as safely possible and consider a work order.{drv}{rul}"
     if pred.risk_level == "elevated":

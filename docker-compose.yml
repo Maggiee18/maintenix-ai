@@ -33,10 +33,12 @@ services:
       SEED_DEMO: ${SEED_DEMO:-true}
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
       TRAIN_ON_START: ${TRAIN_ON_START:-true}
+      CMAPSS: ${CMAPSS:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
     volumes:
       - models:/app/models
+      - datasets:/app/datasets
     ports:
       - "${API_PORT:-8000}:8000"
     restart: unless-stopped
@@ -66,3 +68,4 @@ services:
 volumes:
   pgdata:
   models:
+  datasets:

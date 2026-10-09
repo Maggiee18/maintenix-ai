@@ -60,7 +60,7 @@ export default function EquipmentListPage() {
                       <td className="td"><Badge tone={e.status === "operational" ? "ok" : e.status === "under_maintenance" ? "warn" : "neutral"}>{label(e.status)}</Badge></td>
                       <td className="td"><HealthBadge state={e.health_state} />{e.open_alerts > 0 && <span className="ml-1 text-2xs text-warn">{e.open_alerts} alert{e.open_alerts > 1 ? "s" : ""}</span>}</td>
                       <td className="td"><ProbabilityBar value={e.latest_prediction?.failure_probability ?? null} level={e.latest_prediction?.risk_level} /></td>
-                      <td className="td text-xs">{e.latest_prediction ? rulText(e.latest_prediction.rul_hours, e.latest_prediction.rul_status) : "—"}</td>
+                      <td className="td text-xs">{e.latest_prediction ? rulText(e.latest_prediction.rul_hours, e.latest_prediction.rul_status, null, e.latest_prediction.rul_unit) : "—"}</td>
                       <td className="td"><SourceBadge source={e.data_source} /></td>
                       <td className="td text-xs text-subtle">{relative(e.latest_prediction?.as_of)}</td>
                     </tr>

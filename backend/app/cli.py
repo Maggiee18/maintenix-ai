@@ -135,6 +135,60 @@ def _demo_work_orders(db, users) -> None:  # type: ignore[no-untyped-def]
                            eng, None)
 
 
+def cmd_import_cmapss(a: argparse.Namespace) -> int:
+    """Load engines from the official NASA C-MAPSS FD001 *test* set as real (imported) equipment.
+
+    Test engines were never used for training. Cycle k of an engine is stored at
+    (now - n_cycles + k) hours, so the latest cycle is "current". Ground-truth RUL
+    from RUL_FD001.txt is printed next to the model's estimate for comparison.
+    """
+    from pathlib import Path
+
+    import numpy as np
+    import pandas as pd
+    from maintenix_ml.adapters.cmapss import read_raw, to_canonical
+
+    data_dir = Path(a.data_dir)
+    raw = read_raw(data_dir / "test_FD001.txt")
+    truth = pd.read_csv(data_dir / "RUL_FD001.txt", header=None, sep=r"\s+").iloc[:, 0].to_numpy()
+    lengths = raw.groupby("unit")["cycle"].max()
+    eligible = [u for u in lengths.index if lengths[u] >= 60]
+    # spread the selection over the range of true remaining life (sorted, evenly spaced)
+    by_rul = sorted(eligible, key=lambda u: truth[u - 1])
+    picks = [by_rul[int(i)] for i in np.linspace(0, len(by_rul) - 1, a.engines)]
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    rows = []
+    with get_sessionmaker()() as db:
+        bootstrap(db)
+        et = db.scalar(select(m.EquipmentType).where(m.EquipmentType.key == "turbofan_engine"))
+        if et is None:
+            print("turbofan_engine type missing; run bootstrap first", file=sys.stderr)
+            return 2
+        for u in sorted(picks):
+            code = f"TF-{u:03d}"
+            if db.scalar(select(m.Equipment.id).where(m.Equipment.code == code)):
+                continue
+            eng = to_canonical(raw[raw["unit"] == u], prefix="FD001")
+            n = len(eng)
+            eng["timestamp"] = [end - timedelta(hours=n - 1 - k) for k in range(n)]
+            eng["unit_id"] = code
+            eq = m.Equipment(code=code, name=f"Turbofan engine {u} (C-MAPSS FD001 test)", equipment_type_id=et.id,
+                             location="NASA C-MAPSS FD001 test set", manufacturer="NASA C-MAPSS (simulation benchmark)",
+                             model_number="FD001", serial_number=f"FD001-test-{u}", data_source="imported",
+                             criticality="high", status="operational")
+            db.add(eq)
+            db.commit()
+            telemetry.ingest_frame(db, eq, eng.drop(columns=["data_source"]), "imported", assume_utc=True)
+            for h in range(min(40, n - 48), 0, -5):
+                inference.run_for_equipment(db, eq, as_of=end - timedelta(hours=h), triggered_by="backfill", raise_alerts=False)
+            pred = inference.run_for_equipment(db, eq, triggered_by="backfill")
+            rows.append({"code": code, "cycles": n, "true_rul": int(truth[u - 1]),
+                         "predicted_rul": round(pred.rul_hours, 1) if pred and pred.rul_hours is not None else None,
+                         "failure_probability": round(pred.failure_probability, 3) if pred and pred.failure_probability is not None else None})
+    print(json.dumps({"imported": rows, "note": "true_rul from RUL_FD001.txt; model clips RUL at 125 cycles"}, indent=2))
+    return 0
+
+
 def cmd_create_user(a: argparse.Namespace) -> int:
     password = os.environ.get("MAINTENIX_NEW_PASSWORD") or getpass.getpass("Password: ")
     if password_problems(password):
@@ -171,6 +225,10 @@ def main(argv: list[str] | None = None) -> int:
     cu.add_argument("role", choices=["admin", "engineer", "technician", "viewer"])
     cu.set_defaults(fn=cmd_create_user)
     sub.add_parser("run-fleet").set_defaults(fn=cmd_run_fleet)
+    ic = sub.add_parser("import-cmapss", help="load real NASA C-MAPSS FD001 test engines as equipment")
+    ic.add_argument("--data-dir", default="../datasets/raw/cmapss")
+    ic.add_argument("--engines", type=int, default=8)
+    ic.set_defaults(fn=cmd_import_cmapss)
     a = p.parse_args(argv)
     return int(a.fn(a))
 

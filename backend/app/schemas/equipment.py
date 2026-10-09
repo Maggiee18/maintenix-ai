@@ -78,6 +78,7 @@ class LatestPredictionBrief(BaseModel):
     is_anomaly: bool | None
     rul_hours: float | None
     rul_status: str
+    rul_unit: str = "h"
 
 
 class EquipmentOut(BaseModel):

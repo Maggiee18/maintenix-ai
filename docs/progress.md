@@ -46,16 +46,24 @@ scripts/                stream_simulator.py, smoke_test.py
 docker/, docker-compose.yml, backend/Dockerfile, frontend/Dockerfile, frontend/nginx.conf, .github/workflows/ci.yml
 ```
 
+## Update: real data (NASA C-MAPSS FD001)
+
+* Original dataset obtained from a public mirror of the unmodified NASA files (the NASA hosts were blocked from the sandbox); verified by row counts, unit counts and first record against the official description, SHA-256 recorded in `scripts/download_cmapss.py`.
+* Turbofan models trained on it: RUL RMSE **11.85 cycles** on the official test set (95 of 100 engines), failure within 30 cycles PR-AUC 0.98.
+* `python -m app.cli import-cmapss` loads 8 real test engines as imported equipment; Docker startup does download, training and import automatically (`CMAPSS=true`), verified on a fresh database.
+* Sensors carry their documented names and units; RUL is shown in flight cycles for turbofans.
+* Tests after this update: ML 26, backend 68, frontend 18, Playwright 5, smoke 14/14, all passing.
+
 ## Outstanding issues
 
 1. **Docker images unverified in this environment.** First thing to do on a machine with Docker Hub access: `cp .env.example .env`, fill secrets, `docker compose up --build`, then `python scripts/smoke_test.py` and the Playwright suite with `E2E_BASE_URL=http://localhost:8080`. The CI `e2e` job does exactly this.
-2. **C-MAPSS not evaluated.** Download FD001 into `datasets/raw/cmapss/` and run `python -m maintenix_ml.train cmapss`. Add the resulting numbers to `ml-methodology.md`.
+2. **Only C-MAPSS FD001.** FD002 to FD004 have six operating conditions and need per condition normalisation.
 3. Frontend bundle is about 700 kB (200 kB gzip) in one chunk; route level code splitting would cut first load.
 4. Recharts 2.x is marked deprecated upstream in favour of 3.x; works, but plan the upgrade.
 
 ## Exact next steps
 
 1. Run the Compose stack and CI on GitHub; fix anything environment specific.
-2. Evaluate on C-MAPSS FD001, then FD002 to FD004 (multiple operating conditions need per condition normalisation in `features.py`, bump `FEATURE_VERSION`).
+2. Extend to C-MAPSS FD002 to FD004 (per operating condition normalisation in `features.py`, bump `FEATURE_VERSION`).
 3. Add drift monitoring: daily feature distribution comparison against training data and alert rate tracking per model version.
 4. Close the loop: use work-order outcomes (failure found / not found) to measure real precision of alerts.

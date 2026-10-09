@@ -39,7 +39,7 @@ export default function PredictionsPage() {
                       <td className="td"><ProbabilityBar value={p.failure_probability} level={p.risk_level} /></td>
                       <td className="td">{p.status === "ok" ? <RiskBadge level={p.risk_level} /> : <Badge>{label(p.status)}</Badge>}</td>
                       <td className="td">{p.is_anomaly ? <Badge tone="watch">Yes</Badge> : <span className="text-xs text-subtle">No</span>}</td>
-                      <td className="td text-xs">{rulText(p.rul_hours, p.rul_status, p.rul_cap_hours)}</td>
+                      <td className="td text-xs">{rulText(p.rul_hours, p.rul_status, p.rul_cap_hours, p.rul_unit)}</td>
                       <td className="td text-xs text-subtle">{p.triggered_by}</td>
                       <td className="td"><button className="btn-ghost !py-0.5 text-xs" onClick={() => setOpen(p.id)}>Explain</button></td>
                     </tr>))}</tbody>

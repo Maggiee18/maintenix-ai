@@ -4,7 +4,7 @@
 
 Maintenix AI ingests equipment sensor readings, predicts the probability that a machine fails within the next 48 hours, detects abnormal behaviour, estimates remaining useful life (RUL) where the data supports it, explains each prediction, and turns the results into deduplicated alerts and a full maintenance work-order workflow. It is an advisory system: nothing in it controls equipment.
 
-> **About the data.** Out of the box, every machine and reading is **simulated** by a documented generator (`ml/maintenix_ml/simulator.py`), labelled "Simulated" throughout the UI and API. Model metrics in this repository are measured on that synthetic data. A NASA C-MAPSS adapter is included for real benchmark work (download required, see `datasets/README.md`).
+> **About the data.** Two sources, always labelled. (1) The original **NASA C-MAPSS FD001** turbofan dataset is downloaded (checksum verified), turbofan models are trained on it, and eight real test engines are loaded into the app as "Imported" equipment. (2) Pumps, motors and compressors use a documented **simulator** (`ml/maintenix_ml/simulator.py`) and are labelled "Simulated", because no public dataset has those machines with run to failure labels.
 
 ## Contents
 
@@ -25,7 +25,7 @@ Unplanned equipment failures stop production, damage neighbouring components and
 * Work orders: open → assigned → in progress → completed / cancelled, with event history, completion records and permissions
 * Dashboard, equipment detail, sensor monitoring, prediction, anomaly, model performance, reports (CSV, injection safe) and admin pages, light and dark themes
 * JWT auth with logout revocation, four roles, rate limited login, audit log
-* Reproducible training and evaluation commands; 67 backend, 25 ML, 17 frontend and 5 end-to-end tests
+* Reproducible training and evaluation commands; 68 backend, 26 ML, 18 frontend and 5 end-to-end tests
 
 ## Architecture
 
@@ -93,8 +93,10 @@ pip install --no-deps -e ml
 createdb maintenix && createdb maintenix_test
 cp .env.example backend/.env   # set DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/maintenix and MODELS_DIR=../models
 
-# 3. Models (simulated data, seed 42, about 5 minutes)
+# 3. Models: simulated fleet (seed 42, about 5 minutes) and real C-MAPSS (about 1 minute)
 python -m maintenix_ml.train --models-dir models simulated --all
+python scripts/download_cmapss.py --dest datasets/raw/cmapss
+python -m maintenix_ml.train --models-dir models cmapss --data-dir datasets/raw/cmapss
 python -m maintenix_ml.evaluate --models-dir models      # verifies stored metrics reproduce
 
 # 4. Schema, reference data, demo fleet, API
@@ -102,6 +104,7 @@ cd backend
 alembic upgrade head
 python -m app.cli bootstrap
 DEMO_USER_PASSWORD=Your-demo-pass1 python -m app.cli seed-demo
+python -m app.cli import-cmapss --data-dir ../datasets/raw/cmapss --engines 8
 uvicorn app.main:app --reload --port 8000
 
 # 5. Frontend (proxies /api to :8000)
@@ -124,6 +127,7 @@ Other commands: `python -m app.cli create-user EMAIL "Name" ROLE`, `python -m ap
 | `BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` | first run | — | creates the first admin once |
 | `SEED_DEMO`, `DEMO_USER_PASSWORD` | no | true / — | simulated demo fleet and demo users |
 | `TRAIN_ON_START` | no | true | train if the models volume is empty |
+| `CMAPSS` | no | true | download NASA C-MAPSS FD001, train turbofan models, import 8 test engines |
 | `PREDICTION_WINDOW` | no | 60 | readings loaded per inference (≥ 48) |
 | `LOGIN_RATE_LIMIT`, `LOGIN_RATE_WINDOW_SECONDS` | no | 10, 300 | login throttling |
 | `MAX_UPLOAD_BYTES`, `MAX_BATCH_ROWS` | no | 5 MB, 5000 | ingestion limits |
@@ -131,11 +135,14 @@ Other commands: `python -m app.cli create-user EMAIL "Name" ROLE`, `python -m ap
 ## Data, demo data and models
 
 * Dataset setup, schemas, C-MAPSS acquisition and licence: [datasets/README.md](datasets/README.md)
+* Real data: `python scripts/download_cmapss.py`, then `python -m maintenix_ml.train cmapss --data-dir datasets/raw/cmapss` and `python -m app.cli import-cmapss`
 * Training: `python -m maintenix_ml.train simulated --all` or `... cmapss --data-dir datasets/raw/cmapss`
 * Evaluation and reproducibility: `python -m maintenix_ml.evaluate`
 * Method, metrics and limitations: [docs/ml-methodology.md](docs/ml-methodology.md)
 
-Headline test results on held-out simulated units:
+Real data, NASA C-MAPSS FD001 official test set (95 of 100 engines with at least 48 cycles): **RUL RMSE 11.85 cycles**, MAE 8.51, NASA score 224.8. Failure within 30 cycles on held-out engines: precision 0.89, recall 0.97, PR-AUC 0.98, all 20 failures warned in advance.
+
+Simulated fleet, held-out units:
 
 | Type | Failure model | Precision | Recall | PR-AUC | Failures warned in advance | RUL MAE near failure |
 |---|---|---|---|---|---|---|
@@ -154,9 +161,9 @@ OpenAPI at `/docs`; guide with roles, endpoints, errors and metric definitions: 
 ## Testing
 
 ```bash
-cd ml && pytest -q                         # 25 tests
-cd backend && pytest -q --cov=app          # 67 tests, 87 % coverage, uses TEST_DATABASE_URL
-cd frontend && npm test                    # 17 tests
+cd ml && pytest -q                         # 26 tests (one needs the real C-MAPSS files)
+cd backend && pytest -q --cov=app          # 68 tests, uses TEST_DATABASE_URL
+cd frontend && npm test                    # 18 tests
 python scripts/smoke_test.py               # 14 checks against a running API
 cd tests/e2e && npx playwright test        # 5 journeys against a running stack
 ```
@@ -173,7 +180,7 @@ Details and the results of this build: [docs/testing.md](docs/testing.md).
 ## Known limitations
 
 * Demo data and all reported metrics are synthetic; the simulator has one failure mode per type and clean noise, so real data will be harder.
-* C-MAPSS adapter and training path are implemented and unit tested with a format fixture, but no C-MAPSS results are reported (dataset not downloadable during the build).
+* Only C-MAPSS subset FD001 (one operating condition) is supported; FD002 to FD004 need per condition normalisation. Five short test engines are skipped rather than padded.
 * Docker images were not built in the build environment (Docker Hub blocked by its network policy). Compose configuration validated, entrypoint sequence verified locally, and CI builds the stack.
 * Rate limiting and model caches are per process; no self-service password reset or MFA; token in sessionStorage.
 * Inference runs synchronously after ingestion; very high frequency feeds would need a queue.

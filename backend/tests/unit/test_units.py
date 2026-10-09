@@ -77,3 +77,10 @@ def test_rate_limiter():
     assert rl.hit("other")
     rl.reset("k")
     assert rl.hit("k")
+
+
+def test_rul_time_unit_per_type():
+    from app.models.entities import time_unit
+
+    assert time_unit("turbofan_engine") == "cycles"
+    assert time_unit("centrifugal_pump") == "h"

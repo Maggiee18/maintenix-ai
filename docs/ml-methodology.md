@@ -1,6 +1,8 @@
 # ML Methodology
 
-All numbers on this page come from `models/*/*/*/metadata.json` produced by
+This page has two kinds of results. Sections 2 to 6 use the built-in **simulated** fleet. Section 9 uses the real **NASA C-MAPSS FD001** benchmark, the original public dataset, and those numbers are directly comparable with published work.
+
+Simulated results come from `models/*/*/*/metadata.json` produced by
 
 ```bash
 python -m maintenix_ml.train --models-dir models simulated --all      # seed 42
@@ -135,3 +137,48 @@ The API returns the top 8 feature contributions, contributions summed per sensor
 * One production model per (type, task) is enforced by a partial unique index. Promotion verifies the artifact loads first and archives the previous version.
 * `python -m maintenix_ml.evaluate` regenerates each simulated dataset from its recorded seed and re-scores the stored artifact. All 8 registered models reproduced their stored test metrics exactly (tolerance 1e-6) when this documentation was written.
 * Retraining is deterministic: retraining the motor models from scratch with seed 42 produced byte-identical test metric blocks and the same dataset fingerprint.
+
+## 9. Real data: NASA C-MAPSS FD001
+
+```bash
+python scripts/download_cmapss.py --dest datasets/raw/cmapss      # SHA-256 verified
+python -m maintenix_ml.train cmapss --data-dir datasets/raw/cmapss --subset FD001
+```
+
+FD001 is the original turbofan degradation dataset: 100 training engines run to failure (20,631 cycles), 100 test engines stopped early with their true remaining cycles in `RUL_FD001.txt`. The same pipeline is used unchanged: validation, the same backward window features on 14 informative sensors, a split of the 100 training engines into 60 / 20 / 20 by engine, model selection on validation engines. Failure horizon is 30 cycles; the RUL target is clipped at 125 cycles (the standard convention). Units below are **flight cycles**.
+
+### RUL
+
+| Evaluation | Engines | RMSE | MAE | Bias | NASA score |
+|---|---|---|---|---|---|
+| **Official test set** (last cycle of each test engine vs `RUL_FD001.txt`, true RUL clipped at 125) | 95 of 100 | **11.85** | 8.51 | +1.2 | 224.8 |
+| Held-out training engines, readings with true RUL ≤ 125 | 20 | 12.16 | 8.69 | +2.5 | — |
+
+Candidates on the held-out engines (validation RMSE → test RMSE near failure): mean baseline 41.6 → 38.6, Ridge 14.4 → 13.7, Random Forest 13.6 → 12.7, **XGBoost 12.4 → 12.2** (selected). For context, published FD001 results are commonly around 16 to 18 RMSE for classical regressors and around 12 to 13 for well tuned deep sequence models; this result was not tuned on the test set, but treat comparisons with care because papers differ in clipping and in how short engines are handled.
+
+**Honest caveats.** Five test engines have fewer than 48 cycles, the feature window, and are skipped rather than padded; they are early in life (high RUL), the easier cases, so including them would likely change the score little, but the number above covers 95 engines, not 100. The 125 cycle clip is applied to the ground truth as is standard.
+
+### Failure within 30 cycles
+
+Selected XGBoost (validation PR-AUC 0.988). Test engines: precision 0.892, recall 0.967, F1 0.928, PR-AUC 0.981, ROC-AUC 0.993, Brier 0.017 at threshold 0.22 (TN 2494, FP 70, FN 20, TP 580). All 20 held-out failures were warned in advance, median first warning 29 cycles before failure, 27 false alarm readings per 1000 healthy cycles.
+
+### Anomaly
+
+Baseline = first 20 % of cycles of each training engine. There is no injected ground truth in real data, so only the pre-failure flag rate (100 % in the last 30 cycles) is reported; degraded engines legitimately deviate from the healthy baseline, so many late-life test engines show "watch".
+
+### In the application
+
+`python -m app.cli import-cmapss --engines 8` loads eight official **test** engines (never used in training), spread across the range of true remaining life, as equipment `TF-xxx` with `data_source = imported`. Cycle k is stored at an hourly timestamp so the latest cycle is "now". The command prints the model estimate next to the ground truth; in this build:
+
+| Engine | Cycles seen | True RUL | Predicted RUL | Failure prob. (30 cycles) |
+|---|---|---|---|---|
+| TF-034 | 203 | 7 | 7.6 | >99 % |
+| TF-036 | 126 | 19 | 29.9 | 79 % |
+| TF-052 | 189 | 29 | 31.3 | 28 % |
+| TF-043 | 172 | 59 | 74.0 | <1 % |
+| TF-093 | 244 | 85 | 52.3 | <1 % |
+| TF-011 | 83 | 97 | 89.7 | <1 % |
+| TF-088 | 68 | 115 | 108.5 | <1 % |
+| TF-096 | 97 | 137 (125 clipped) | 120.2 | <1 % |
+
+TF-093 is the clearest miss (under estimate by about 33 cycles, the safe direction). This is what real model error looks like and why the UI always shows the typical error beside an estimate.

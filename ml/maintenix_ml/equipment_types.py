@@ -100,20 +100,40 @@ AIR_COMPRESSOR = EquipmentTypeSpec(
     data_note="Simulated intermittent fault episodes; no run-to-failure data, so RUL is unavailable.",
 )
 
-_CMAPSS_SENSORS = tuple(
-    SensorSpec(f"s{i}", "-", f"C-MAPSS sensor {i}", -1e6, 1e6, -1e6, 1e6)
-    for i in (2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21)
+# C-MAPSS FD001 sensors that vary (constant ones are dropped). Names and units follow the
+# dataset documentation (Saxena et al., 2008). "Normal" bands are the 1st to 99th percentile
+# of the first 20 % of cycles of the 100 training engines; valid ranges are generous bounds
+# used only to reject corrupt values.
+def _cm(name: str, unit: str, desc: str, lo: float, hi: float, nlo: float, nhi: float) -> SensorSpec:
+    return SensorSpec(name, unit, desc, lo, hi, nlo, nhi)
+
+
+_CMAPSS_SENSORS = (
+    _cm("s2", "degR", "T24 total temperature at LPC outlet", 580, 710, 641.5, 643.24),
+    _cm("s3", "degR", "T30 total temperature at HPC outlet", 1400, 1800, 1575.94, 1597.26),
+    _cm("s4", "degR", "T50 total temperature at LPT outlet", 1240, 1590, 1390.08, 1415.51),
+    _cm("s7", "psia", "P30 total pressure at HPC outlet", 490, 615, 552.57, 555.29),
+    _cm("s8", "rpm", "Nf physical fan speed", 2140, 2630, 2387.95, 2388.18),
+    _cm("s9", "rpm", "Nc physical core speed", 8100, 10200, 9038.02, 9073.67),
+    _cm("s11", "psia", "Ps30 static pressure at HPC outlet", 42, 54, 46.99, 47.72),
+    _cm("s12", "pps/psi", "phi ratio of fuel flow to Ps30", 465, 580, 520.81, 522.97),
+    _cm("s13", "rpm", "NRf corrected fan speed", 2140, 2630, 2387.94, 2388.17),
+    _cm("s14", "rpm", "NRc corrected core speed", 7280, 9130, 8120.18, 8153.84),
+    _cm("s15", "-", "BPR bypass ratio", 7.4, 9.5, 8.359, 8.4795),
+    _cm("s17", "-", "htBleed bleed enthalpy", 340, 440, 390, 395),
+    _cm("s20", "lbm/s", "W31 HPT coolant bleed", 34, 44, 38.64, 39.23),
+    _cm("s21", "lbm/s", "W32 LPT coolant bleed", 20, 26, 23.18, 23.53),
 )
 
 TURBOFAN_ENGINE = EquipmentTypeSpec(
     key="turbofan_engine",
     display_name="Turbofan Engine (C-MAPSS)",
-    description="NASA C-MAPSS FD001 turbofan simulation. One reading per operating cycle.",
+    description="NASA C-MAPSS FD001 turbofan degradation data (real benchmark dataset). One reading per flight cycle.",
     sensors=_CMAPSS_SENSORS,
     rul_supported=True,
     sampling_interval_seconds=3600,  # cycles are mapped to 1 hour for storage; see docs
     failure_horizon_hours=30,
-    data_note="Requires the NASA C-MAPSS dataset downloaded locally (see datasets/README.md).",
+    data_note="NASA C-MAPSS FD001 (public domain). Cycles are stored as hourly timestamps, so hours below mean flight cycles.",
 )
 
 EQUIPMENT_TYPES: dict[str, EquipmentTypeSpec] = {

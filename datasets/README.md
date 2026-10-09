@@ -27,16 +27,19 @@ df = generate_fleet("centrifugal_pump", n_units=60, seed=42)  # deterministic
 
 Ground truth columns (`gt_*`) exist only because the data is synthetic. They are used for labels and evaluation, never as model inputs.
 
-## 2. NASA C-MAPSS (optional, for RUL research)
+## 2. NASA C-MAPSS (real benchmark data, used by default)
 
 The Commercial Modular Aero-Propulsion System Simulation turbofan degradation dataset (Saxena et al., 2008) is the standard public benchmark for RUL.
 
-**It is not included and was not available while this repository was built** (the build environment could not reach the NASA download hosts). No C-MAPSS metrics are claimed anywhere in this project.
+The files are not committed (git ignored) but are downloaded automatically: `docker compose up` does it on first start (`CMAPSS=true`), or run it yourself. Results on it are in `docs/ml-methodology.md` section 9.
 
 ### Acquire
 
-1. Download "Turbofan Engine Degradation Simulation Data Set" from the NASA Prognostics Center of Excellence data repository: <https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/>
-2. Extract `train_FD001.txt`, `test_FD001.txt` and `RUL_FD001.txt` into `datasets/raw/cmapss/`.
+```bash
+python scripts/download_cmapss.py --dest datasets/raw/cmapss
+```
+
+The script tries the official NASA PCoE zip first, then a public mirror of the unmodified text files, and keeps a file only if its SHA-256 matches the recorded value (the copy used in this build was checked against the official description: 100 training engines and 20,631 rows, 100 test engines and 13,096 rows, 100 RUL values, identical first record). Manual route: download "Turbofan Engine Degradation Simulation Data Set" from the NASA Prognostics Center of Excellence repository (<https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/>) and put `train_FD001.txt`, `test_FD001.txt`, `RUL_FD001.txt` into `datasets/raw/cmapss/`.
 
 ### Schema (FD001)
 
@@ -56,7 +59,13 @@ Whitespace separated, no header, 26 columns: `unit, cycle, op_setting_1..3, s1..
 python -m maintenix_ml.train cmapss --data-dir datasets/raw/cmapss --subset FD001
 ```
 
-The run prints validation and test metrics plus RMSE, MAE and the asymmetric NASA score on the official test set.
+The run prints validation and test metrics plus RMSE, MAE and the asymmetric NASA score on the official test set. Then load real test engines into the app:
+
+```bash
+cd backend && python -m app.cli import-cmapss --data-dir ../datasets/raw/cmapss --engines 8
+```
+
+Sensors are stored with their documented names and units (for example s4 = T50 LPT outlet temperature, °R; s11 = Ps30 HPC static pressure, psia), and RUL is shown in flight cycles.
 
 ### Licence and attribution
 

@@ -45,6 +45,11 @@ WO_STATUSES = ("open", "assigned", "in_progress", "completed", "cancelled")
 MAINTENANCE_ACTIONS = ("inspection", "repair", "replacement", "adjustment", "lubrication", "calibration", "other")
 
 
+def time_unit(equipment_type_key: str) -> str:
+    """C-MAPSS stores one reading per flight cycle; everything else is hourly."""
+    return "cycles" if equipment_type_key == "turbofan_engine" else "h"
+
+
 # ---------------------------------------------------------------------------- auth
 class Role(Base):
     __tablename__ = "roles"
@@ -263,6 +268,11 @@ class PredictionResult(Base):
     explanation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     sensor_deviations: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     triggered_by: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    equipment: Mapped[Equipment] = relationship(foreign_keys=[equipment_id], lazy="select", viewonly=True)
+
+    @property
+    def rul_unit(self) -> str:
+        return time_unit(self.equipment.equipment_type.key)
 
     __table_args__ = (
         Index("ix_prediction_results_equipment_asof", "equipment_id", text("as_of DESC")),

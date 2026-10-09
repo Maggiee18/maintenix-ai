@@ -29,8 +29,8 @@ export function PredictionPanel({ p }: { p: PredictionDetail }) {
         </div>
         <div className="rounded-md border border-border p-3">
           <div className="text-2xs font-medium text-subtle">Remaining useful life</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{rulText(p.rul_hours, p.rul_status, p.rul_cap_hours)}</div>
-          <div className="text-2xs text-subtle">{p.rul_status === "ok" ? `Typical error ±${num(p.rul_typical_error_hours, 0)} h on held-out units` : p.rul_status === "unavailable" ? "No run-to-failure data for this type" : "—"}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{rulText(p.rul_hours, p.rul_status, p.rul_cap_hours, p.rul_unit)}</div>
+          <div className="text-2xs text-subtle">{p.rul_status === "ok" ? `Typical error ±${num(p.rul_typical_error_hours, 0)} ${p.rul_unit} on held-out units` : p.rul_status === "unavailable" ? "No run-to-failure data for this type" : "—"}</div>
         </div>
       </div>
       {p.recommendation && <Notice tone={p.risk_level === "high" ? "danger" : p.risk_level === "elevated" ? "warn" : "watch"}><strong>Advisory:</strong> {p.recommendation}</Notice>}

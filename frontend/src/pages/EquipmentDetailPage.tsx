@@ -98,7 +98,7 @@ function Overview({ e }: { e: EquipmentDetail }) {
                   const out = v !== undefined && (v < s.normal_min || v > s.normal_max);
                   return (
                     <tr key={s.name}>
-                      <td className="py-1.5 text-sm">{label(s.name)}</td>
+                      <td className="py-1.5 text-sm">{label(s.name)}<div className="text-2xs text-subtle">{s.description}</div></td>
                       <td className={`py-1.5 text-right text-sm tabular-nums ${out ? "font-semibold text-warn" : ""}`}>{num(v, 2)} <span className="text-2xs text-subtle">{s.unit}</span></td>
                       <td className="py-1.5 pl-2 text-right text-2xs text-subtle">normal {s.normal_min}–{s.normal_max}</td>
                     </tr>
@@ -167,9 +167,9 @@ function History({ e }: { e: EquipmentDetail }) {
           <Card title="Anomaly score">
             <TimeChart data={d.points.map((p) => ({ t: p.as_of, s: p.anomaly_score }))} lines={[{ key: "s", label: "Anomaly score", color: tokenColor("watch") }]} height={200} />
           </Card>
-          <Card title="Estimated RUL (hours)">
+          <Card title={`Estimated RUL (${e.equipment_type === "turbofan_engine" ? "flight cycles" : "hours"})`}>
             {e.type_info.rul_supported
-              ? <TimeChart data={d.points.map((p) => ({ t: p.as_of, r: p.rul_hours }))} lines={[{ key: "r", label: "RUL (h)", color: tokenColor("series-3") }]} height={200} valueFormat={(v) => v.toFixed(0)} />
+              ? <TimeChart data={d.points.map((p) => ({ t: p.as_of, r: p.rul_hours }))} lines={[{ key: "r", label: e.equipment_type === "turbofan_engine" ? "RUL (cycles)" : "RUL (h)", color: tokenColor("series-3") }]} height={200} valueFormat={(v) => v.toFixed(0)} />
               : <Empty title="RUL unavailable">This equipment type has no run-to-failure training data, so remaining useful life is not estimated.</Empty>}
           </Card>
           <Card title="Maintenance events" className="lg:col-span-2" bodyClass="p-0">

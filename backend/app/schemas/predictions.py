@@ -26,6 +26,7 @@ class PredictionOut(ORMModel):
     rul_cap_hours: float | None
     rul_typical_error_hours: float | None
     rul_status: str
+    rul_unit: str = "h"
     failure_model_id: int | None
     anomaly_model_id: int | None
     rul_model_id: int | None

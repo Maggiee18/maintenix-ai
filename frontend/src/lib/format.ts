@@ -25,12 +25,13 @@ export function relative(iso: string | null | undefined): string {
 export const label = (s: string | null | undefined) =>
   s ? s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : "—";
 
-export function rulText(rul: number | null, status: string, cap?: number | null): string {
+/** `unit` is "h" for hourly equipment and "cycles" for C-MAPSS turbofans (one reading per flight cycle). */
+export function rulText(rul: number | null, status: string, cap?: number | null, unit = "h"): string {
   if (status === "unavailable") return "RUL unavailable";
   if (status === "no_model") return "No RUL model";
   if (status === "insufficient_data") return "Insufficient data";
   if (rul === null) return "—";
-  return cap && rul >= cap - 0.5 ? `≥ ${Math.round(cap)} h` : `${Math.round(rul)} h`;
+  return cap && rul >= cap - 0.5 ? `≥ ${Math.round(cap)} ${unit}` : `${Math.round(rul)} ${unit}`;
 }
 
 /** Probability for display. Calibrated scores can reach exactly 0 or 1; never show certainty. */

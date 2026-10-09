@@ -26,7 +26,7 @@ export interface EquipmentType {
 
 export interface LatestPredictionBrief {
   id: number; as_of: string; status: string; failure_probability: number | null; risk_level: RiskLevel | null;
-  is_anomaly: boolean | null; rul_hours: number | null; rul_status: string;
+  is_anomaly: boolean | null; rul_hours: number | null; rul_status: string; rul_unit: string;
 }
 
 export interface Equipment {
@@ -55,7 +55,7 @@ export interface Prediction {
   id: number; equipment_id: number; equipment_code: string | null; as_of: string; created_at: string; status: string;
   readings_used: number; failure_probability: number | null; failure_threshold: number | null; risk_level: RiskLevel | null;
   anomaly_score: number | null; anomaly_threshold: number | null; is_anomaly: boolean | null; rul_hours: number | null;
-  rul_cap_hours: number | null; rul_typical_error_hours: number | null; rul_status: string;
+  rul_cap_hours: number | null; rul_typical_error_hours: number | null; rul_status: string; rul_unit: string;
   failure_model_id: number | null; anomaly_model_id: number | null; rul_model_id: number | null; triggered_by: string;
   recommendation: string | null;
 }

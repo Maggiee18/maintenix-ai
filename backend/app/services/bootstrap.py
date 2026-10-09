@@ -43,13 +43,16 @@ def sync_equipment_types(db: Session) -> int:
 def ensure_thresholds(db: Session) -> None:
     model_thr = production_thresholds(db)
     for et in db.scalars(select(m.EquipmentType)):
-        if db.scalar(select(m.AlertThreshold.id).where(m.AlertThreshold.equipment_type_id == et.id)):
-            continue
         thr = model_thr.get(et.key)
         warning = round(min(max(float(thr), 0.05), 0.8), 2) if thr is not None else 0.3
         critical = round(min(max(0.7, warning + 0.15), 0.98), 2)
-        db.add(m.AlertThreshold(equipment_type_id=et.id, risk_warning=warning, risk_critical=critical,
-                                anomaly_alerts_enabled=True, cooldown_minutes=360))
+        existing = db.scalar(select(m.AlertThreshold).where(m.AlertThreshold.equipment_type_id == et.id))
+        if existing is None:
+            db.add(m.AlertThreshold(equipment_type_id=et.id, risk_warning=warning, risk_critical=critical,
+                                    anomaly_alerts_enabled=True, cooldown_minutes=360))
+        elif existing.updated_by_id is None and thr is not None and existing.risk_warning != warning:
+            # still on defaults (never edited by an admin): follow the newly available model threshold
+            existing.risk_warning, existing.risk_critical = warning, critical
     db.commit()
 
 
