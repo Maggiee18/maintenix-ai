@@ -88,7 +88,7 @@ def sync_from_disk(db: Session, models_dir: Path | None = None, auto_promote: bo
     return {"added": added, "skipped": skipped, "promoted": promoted, "retired": retired}
 
 
-def promote(db: Session, model_id: int, actor_id: int, ip: str | None = None) -> m.ModelVersion:
+def promote(db: Session, model_id: int, actor_id: int | None, ip: str | None = None) -> m.ModelVersion:
     mv = db.get(m.ModelVersion, model_id)
     if mv is None:
         raise NotFound("Model version not found")

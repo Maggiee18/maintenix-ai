@@ -4,7 +4,7 @@ Short, honest answers to the questions this project tends to raise. Numbers refe
 
 ## 1. The 30 second pitch
 
-Maintenix AI watches equipment sensor data, estimates the chance each machine fails in the next 48 hours, flags unusual behaviour, estimates remaining life where the data supports it, and turns that into alerts and maintenance work orders. It is a full stack: FastAPI and PostgreSQL behind a React dashboard, with a separate ML package that trains per equipment type models and a registry the API loads from. It is validated on the original NASA C-MAPSS turbofan dataset (RUL RMSE 11.85 cycles on the official test set), and the demo mixes eight real C-MAPSS engines with a clearly labelled simulated fleet of pumps, motors and compressors.
+Maintenix AI watches equipment sensor data, estimates the chance each machine fails in the next 48 hours, flags unusual behaviour, estimates remaining life where the data supports it, and turns that into alerts and maintenance work orders. It is a full stack: FastAPI and PostgreSQL behind a React dashboard, with a separate ML package that trains per equipment type models and a registry the API loads from. It is validated on the original NASA C-MAPSS turbofan dataset (RUL RMSE 11.80 cycles on the official test set), and the demo mixes eight real C-MAPSS engines with a clearly labelled simulated fleet of pumps, motors and compressors.
 
 ## 2. Why each technology
 
@@ -42,7 +42,7 @@ Maintenix AI watches equipment sensor data, estimates the chance each machine fa
 * **Threshold** maximises F2: recall counts twice as much as precision because a missed failure means unplanned downtime, possible secondary damage and safety exposure, while a false alarm costs an inspection. The confusion matrix on the Model Performance page states both costs in plain words.
 * **Event level view**: all 12 test pump failures were warned about, with a median first warning 47 h ahead, at about 21 false alarm readings per 1000 healthy hours. That is closer to what a maintenance planner cares about than per reading recall.
 * **Calibration**: isotonic regression on validation scores makes "30 %" mean roughly 30 %. Brier score is reported. Because isotonic output is a step function that reaches 0 and 1, the UI never displays 0 % or 100 %.
-* **RUL**: MAE and RMSE in hours, reported near failure (true RUL ≤ 200 h), plus bias. The motor model is within about 20 h on average near failure but over estimates (bias +10.6 h), which is the dangerous direction, so the UI shows the typical error next to the estimate.
+* **RUL**: MAE and RMSE in hours, reported near failure (true RUL ≤ 200 h), plus bias. The motor model is within about 19 h on average near failure. Over estimating is the dangerous direction, so every RUL model subtracts its average optimism measured on validation data (motor bias fell from +10.4 h to +4.3 h), and the UI shows the typical error next to the estimate.
 
 ## 6. Anomalies vs failures
 
@@ -69,8 +69,14 @@ Validation errors come back as 422 with row level details (an upload with 3 bad 
 * **Safety**: stays advisory. Integration with control systems would need a functional safety assessment and should never act automatically on a model output.
 * **Validation**: field trials comparing model alerts with maintenance outcomes before anyone relies on the numbers.
 
-## 11. Honest limitations
+## 11. How I improved the model without cheating
+
+* All tuning used 5-fold cross validation grouped by engine on the training engines; the official test set was read once at the end. Tuning on it would turn the test score into a training score.
+* What helped: an "age" feature (cycles since the engine entered service), longer windows (15 and 90 cycles), partial windows so short records still get a prediction, a shallower XGBoost, refitting on train plus validation, and a bias correction measured on validation data. What did not: exponential smoothing, other tree ensembles, quantile and Huber losses.
+* I report the trade-off: the bias correction made estimates safer (fewer late predictions, better NASA score) while the official RMSE moved slightly, within noise.
+
+## 12. Honest limitations
 
 * Pump, motor and compressor data come from the built-in simulator, which is cleaner than reality. A linear model winning there is a sign the simulated signal is simple.
-* The real data evidence is NASA C-MAPSS FD001: RUL RMSE 11.85 cycles on the official test set (95 of 100 engines; 5 short engines skipped, not padded). That is still a simulation benchmark from NASA, one operating condition and one fault mode, not plant data.
+* The real data evidence is NASA C-MAPSS FD001: RUL RMSE 11.80 cycles on all 100 official test engines. That is still a simulation benchmark from NASA, one operating condition and one fault mode, not plant data.
 * The Docker images were not built in the build environment (Docker Hub was blocked); CI builds them.

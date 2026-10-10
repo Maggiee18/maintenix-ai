@@ -207,6 +207,25 @@ def cmd_create_user(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_promote_latest(_: argparse.Namespace) -> int:
+    """Register new artifacts and promote the newest compatible version of every (type, task)."""
+    from .services.models_registry import promote, sync_from_disk
+
+    with get_sessionmaker()() as db:
+        sync_from_disk(db)
+        promoted = []
+        for et in db.scalars(select(m.EquipmentType)):
+            for task in m.MODEL_TASKS:
+                newest = db.scalars(select(m.ModelVersion).where(
+                    m.ModelVersion.equipment_type_id == et.id, m.ModelVersion.task == task,
+                    m.ModelVersion.status != "archived").order_by(m.ModelVersion.trained_at.desc()).limit(1)).first()
+                if newest is not None and newest.status != "production":
+                    promote(db, newest.id, actor_id=None, ip="cli")  # audited; verifies the artifact loads first
+                    promoted.append(f"{et.key}/{task}/{newest.version}")
+    print(json.dumps({"promoted": promoted}))
+    return 0
+
+
 def cmd_run_fleet(_: argparse.Namespace) -> int:
     with get_sessionmaker()() as db:
         print(json.dumps(inference.run_fleet(db, triggered_by="scheduled")))
@@ -227,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     cu.add_argument("role", choices=["admin", "engineer", "technician", "viewer"])
     cu.set_defaults(fn=cmd_create_user)
     sub.add_parser("run-fleet").set_defaults(fn=cmd_run_fleet)
+    sub.add_parser("promote-latest", help="promote the newest model version of every type and task").set_defaults(fn=cmd_promote_latest)
     ic = sub.add_parser("import-cmapss", help="load real NASA C-MAPSS FD001 test engines as equipment")
     ic.add_argument("--data-dir", default="../datasets/raw/cmapss")
     ic.add_argument("--engines", type=int, default=8)

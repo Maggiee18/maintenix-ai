@@ -25,7 +25,7 @@ Unplanned equipment failures stop production, damage neighbouring components and
 * Work orders: open → assigned → in progress → completed / cancelled, with event history, completion records and permissions
 * Dashboard, equipment detail, sensor monitoring, prediction, anomaly, model performance, reports (CSV, injection safe) and admin pages, light and dark themes
 * JWT auth with logout revocation, four roles, rate limited login, audit log
-* Reproducible training and evaluation commands; 68 backend, 26 ML, 18 frontend and 5 end-to-end tests
+* Reproducible training and evaluation commands; 68 backend, 29 ML, 18 frontend and 5 end-to-end tests
 
 ## Architecture
 
@@ -140,14 +140,14 @@ Other commands: `python -m app.cli create-user EMAIL "Name" ROLE`, `python -m ap
 * Evaluation and reproducibility: `python -m maintenix_ml.evaluate`
 * Method, metrics and limitations: [docs/ml-methodology.md](docs/ml-methodology.md)
 
-Real data, NASA C-MAPSS FD001 official test set (95 of 100 engines with at least 48 cycles): **RUL RMSE 11.85 cycles**, MAE 8.51, NASA score 224.8. Failure within 30 cycles on held-out engines: precision 0.89, recall 0.97, PR-AUC 0.98, all 20 failures warned in advance.
+Real data, NASA C-MAPSS FD001 official test set (all 100 engines): **RUL RMSE 11.80 cycles**, MAE 8.79, NASA score 212.4; on held-out training engines near failure RMSE 9.96. Failure within 30 cycles on held-out engines: precision 0.94, recall 0.96, PR-AUC 0.99, all 20 failures warned in advance, 12 false alarm readings per 1000 healthy cycles. How the model was improved, with before and after numbers: `docs/ml-methodology.md` sections 10 and 11.
 
 Simulated fleet, held-out units:
 
 | Type | Failure model | Precision | Recall | PR-AUC | Failures warned in advance | RUL MAE near failure |
 |---|---|---|---|---|---|---|
-| Pump | Logistic Regression | 0.83 | 0.96 | 0.97 | 12 / 12 | 24.9 h |
-| Motor | Logistic Regression | 0.93 | 0.91 | 0.97 | 12 / 12 | 19.8 h |
+| Pump | Logistic Regression | 0.83 | 0.96 | 0.97 | 12 / 12 | 20.7 h |
+| Motor | Logistic Regression | 0.93 | 0.91 | 0.97 | 12 / 12 | 19.4 h |
 | Compressor | Logistic Regression | 0.66 | 0.76 | 0.80 | 24 / 24 | unavailable by design |
 
 ## Database migrations
@@ -161,7 +161,7 @@ OpenAPI at `/docs`; guide with roles, endpoints, errors and metric definitions: 
 ## Testing
 
 ```bash
-cd ml && pytest -q                         # 26 tests (one needs the real C-MAPSS files)
+cd ml && pytest -q                         # 29 tests (one needs the real C-MAPSS files)
 cd backend && pytest -q --cov=app          # 68 tests, uses TEST_DATABASE_URL
 cd frontend && npm test                    # 18 tests
 python scripts/smoke_test.py               # 14 checks against a running API
@@ -180,7 +180,7 @@ Details and the results of this build: [docs/testing.md](docs/testing.md).
 ## Known limitations
 
 * Demo data and all reported metrics are synthetic; the simulator has one failure mode per type and clean noise, so real data will be harder.
-* Only C-MAPSS subset FD001 (one operating condition) is supported; FD002 to FD004 need per condition normalisation. Five short test engines are skipped rather than padded.
+* Only C-MAPSS subset FD001 (one operating condition) is supported; FD002 to FD004 need per condition normalisation.
 * Docker images were not built in the build environment (Docker Hub blocked by its network policy). Compose configuration validated, entrypoint sequence verified locally, and CI builds the stack.
 * Rate limiting and model caches are per process; no self-service password reset or MFA; token in sessionStorage.
 * Inference runs synchronously after ingestion; very high frequency feeds would need a queue.

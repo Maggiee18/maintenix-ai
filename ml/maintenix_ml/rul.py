@@ -35,9 +35,11 @@ class RulBundle:
     cap: float
     feature_names: list[str]
     test_mae: float | None = None
+    #: subtracted from raw predictions; the mean validation residual near failure (see train_rul_model)
+    bias_correction: float = 0.0
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return np.clip(self.estimator.predict(X), 0, self.cap)
+        return np.clip(self.estimator.predict(X) - getattr(self, "bias_correction", 0.0), 0, self.cap)
 
 
 def candidate_regressors(seed: int, xgb_params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -55,9 +57,15 @@ def candidate_regressors(seed: int, xgb_params: dict[str, Any] | None = None) ->
 def train_rul_model(
     X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray,
     feature_names: list[str], cap: float, seed: int, xgb_params: dict[str, Any] | None = None,
-    refit_on_validation: bool = False,
+    refit_on_validation: bool = False, correct_bias: bool = True,
 ) -> tuple[RulBundle, dict[str, Any]]:
     """Fit candidates on train, select on validation.
+
+    ``correct_bias``: tree models trained on a clipped target tend to be
+    optimistic near failure, the risky direction. The mean residual
+    (prediction minus truth) of the selected model on validation readings with
+    true RUL below the cap is stored and subtracted from future predictions.
+    It is measured on validation data only, before any refit.
 
     With ``refit_on_validation`` the selected configuration is fitted again on
     train + validation (more data, same settings); selection already happened, so
@@ -72,10 +80,15 @@ def train_rul_model(
         fitted[name] = model
     best = min((k for k in comparison if k != "mean_baseline"), key=lambda k: comparison[k]["validation"]["rmse"])
     final = fitted[best]
+    bias = 0.0
+    near = yv < cap
+    if correct_bias and near.any():
+        bias = float((np.clip(final.predict(X_val[near]), 0, cap) - yv[near]).mean())
     if refit_on_validation:
         final = clone(final).fit(np.vstack([X_train, X_val]), np.concatenate([yt, yv]))
-    return RulBundle(best, final, cap, feature_names), {
+    return RulBundle(best, final, cap, feature_names, bias_correction=bias), {
         "selected_algorithm": best, "selection_metric": "validation_rmse", "cap_hours": cap,
+        "bias_correction": bias, "bias_correction_rule": "mean validation residual where true RUL < cap",
         "refit_on_train_and_validation": refit_on_validation, "xgb_params": xgb_params or {},
         "comparison": comparison, "fitted_candidates": fitted,
     }

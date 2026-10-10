@@ -122,3 +122,15 @@ def test_real_cmapss_fd001_loads_and_validates():
     assert df["unit_id"].nunique() == 100 and len(df) == 20631
     assert df["gt_failure_event"].sum() == 100
     assert validate_readings(df, get_spec("turbofan_engine")).rejected_rows == 0
+
+
+def test_rul_bias_correction_is_stored_and_applied(trained):
+    from sklearn.dummy import DummyRegressor
+
+    from maintenix_ml.rul import RulBundle
+
+    meta = next(m for m in list_metadata(trained) if m["task"] == "rul")
+    assert "bias_correction" in meta["metrics"] and meta["metrics"]["bias_correction_rule"]
+    est = DummyRegressor(strategy="constant", constant=50.0).fit(np.zeros((2, 1)), [50.0, 50.0])
+    b = RulBundle("dummy", est, cap=125.0, feature_names=["x"], bias_correction=5.0)
+    assert b.predict(np.zeros((1, 1)))[0] == 45.0

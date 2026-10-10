@@ -131,6 +131,7 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, floa
         "rmse": float(root_mean_squared_error(y_true, y_pred)),
         "bias": float(err.mean()),
         "overestimate_rate": float((err > 0).mean()),
+        "late_by_10_plus_rate": float((err > 10).mean()),
     }
 
 

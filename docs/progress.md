@@ -49,10 +49,18 @@ docker/, docker-compose.yml, backend/Dockerfile, frontend/Dockerfile, frontend/n
 ## Update: real data (NASA C-MAPSS FD001)
 
 * Original dataset obtained from a public mirror of the unmodified NASA files (the NASA hosts were blocked from the sandbox); verified by row counts, unit counts and first record against the official description, SHA-256 recorded in `scripts/download_cmapss.py`.
-* Turbofan models trained on it: RUL RMSE **11.85 cycles** on the official test set (95 of 100 engines), failure within 30 cycles PR-AUC 0.98.
+* Turbofan models trained on it (first version): RUL RMSE 11.85 cycles on the official test set (95 of 100 engines). See the improvement update below for current numbers.
 * `python -m app.cli import-cmapss` loads 8 real test engines as imported equipment; Docker startup does download, training and import automatically (`CMAPSS=true`), verified on a fresh database.
 * Sensors carry their documented names and units; RUL is shown in flight cycles for turbofans.
 * Tests after this update: ML 26, backend 68, frontend 18, Playwright 5, smoke 14/14, all passing.
+
+## Update: model improvements (rounds 1 and 2)
+
+* Round 1 (feature version 1.1.0): per type feature windows; C-MAPSS gets 15/90 cycle windows, partial windows from 30 cycles and an age feature; depth 3 XGBoost; RUL refit on train plus validation. Chosen by engine-grouped CV on training engines only (`ml/experiments/`).
+* Round 2: validation-measured bias correction for every RUL model (safer, less optimistic estimates).
+* C-MAPSS now: official test RMSE 11.80 on all 100 engines (was 11.85 on 95), NASA score 212.4; held-out near-failure RMSE 9.96 (was 12.16); failure model false alarms per 1000 healthy cycles 12.3 (was 27.3).
+* Existing deployments: `python -m app.cli promote-latest` promotes the new versions (audited); incompatible old models are retired automatically on startup.
+* Tests: ML 29, backend 68, frontend 18, all passing; 8 / 8 simulated models reproduce.
 
 ## Outstanding issues
 

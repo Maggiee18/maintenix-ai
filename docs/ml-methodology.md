@@ -117,10 +117,10 @@ Candidates: mean baseline, Ridge, Random Forest, XGBoost; selection by validatio
 
 | Type | Selected | MAE (RUL ≤ 200 h) | RMSE (≤ 200 h) | Bias (≤ 200 h) | MAE, mean baseline (≤ 200 h) | MAE all readings |
 |---|---|---|---|---|---|---|
-| Pump | XGBoost | 24.9 h | 34.2 h | +16.7 h | 74.2 h | 10.9 h |
-| Motor | XGBoost | 19.8 h | 27.5 h | +10.6 h | 77.8 h | 7.9 h |
+| Pump | XGBoost | 20.7 h | 29.5 h | +9.9 h | 74.2 h | 13.7 h |
+| Motor | XGBoost | 19.4 h | 26.5 h | +4.3 h | 77.8 h | 11.5 h |
 
-**Limitations.** The models over estimate near failure (positive bias, 66 to 72 % of near failure predictions too high), which is the risky direction; the UI shows the typical error next to every estimate. A prediction at the cap means "at least 200 h". One simulated failure mode per type; real assets have several and RUL would need a model per mode or a survival model.
+**Limitations.** Even after the validation-based bias correction (section 10) the models still over estimate near failure on test units (bias +9.9 h pump, +4.3 h motor), which is the risky direction; the UI shows the typical error next to every estimate. A prediction at the cap means "at least 200 h". One simulated failure mode per type; real assets have several and RUL would need a model per mode or a survival model.
 
 ## 7. Explainability
 
@@ -151,10 +151,10 @@ FD001 is the original turbofan degradation dataset: 100 training engines run to 
 
 | Evaluation | Engines | RMSE | MAE | Bias | NASA score |
 |---|---|---|---|---|---|
-| **Official test set** (last cycle of each test engine vs `RUL_FD001.txt`, true RUL clipped at 125) | **100 of 100** | **11.65** | 8.51 | +0.5 | 234.1 |
-| Held-out training engines, readings with true RUL ≤ 125 | 20 | 10.10 | 7.25 | +1.8 | — |
+| **Official test set** (last cycle of each test engine vs `RUL_FD001.txt`, true RUL clipped at 125) | **100 of 100** | **11.80** | 8.79 | -1.8 | 212.4 |
+| Held-out training engines, readings with true RUL ≤ 125 | 20 | 9.96 | 7.22 | -0.6 | — |
 
-Current model (feature version 1.1.0): XGBoost with depth 3, refitted on training plus validation engines after selection. See section 10 for how it was improved and what each change bought. For context, published FD001 results are commonly around 16 to 18 RMSE for classical regressors and around 12 to 13 for well tuned deep sequence models; this result was not tuned on the test set, but treat comparisons with care because papers differ in clipping and in how short engines are handled.
+Current model (feature version 1.1.0): XGBoost with depth 3, refitted on training plus validation engines after selection, with a validation-measured bias correction of 2.4 cycles subtracted from every estimate. See section 10 for how it was improved and what each change bought. For context, published FD001 results are commonly around 16 to 18 RMSE for classical regressors and around 12 to 13 for well tuned deep sequence models; this result was not tuned on the test set, but treat comparisons with care because papers differ in clipping and in how short engines are handled.
 
 **Honest caveats.** The 125 cycle clip is applied to the ground truth as is standard. The official test score is a single prediction per engine (100 numbers), so it moves noticeably with small changes; the held-out trajectory metrics use about 2,500 predictions and are the steadier guide.
 
@@ -170,18 +170,18 @@ Baseline = first 20 % of cycles of each training engine. There is no injected gr
 
 `python -m app.cli import-cmapss --engines 8` loads eight official **test** engines (never used in training), spread across the range of true remaining life, as equipment `TF-xxx` with `data_source = imported`. Cycle k is stored at an hourly timestamp so the latest cycle is "now". The command prints the model estimate next to the ground truth; in this build:
 
-| Engine | Cycles seen | True RUL | Predicted RUL (now) | Predicted RUL (before) | Failure prob. (30 cycles) |
+| Engine | Cycles seen | True RUL | v1.0 | v1.1 | v1.2 (current) |
 |---|---|---|---|---|---|
-| TF-034 | 203 | 7 | 5.2 | 7.6 | >99 % |
-| TF-036 | 126 | 19 | 26.2 | 29.9 | 89 % |
-| TF-052 | 189 | 29 | 27.4 | 31.3 | 11 % |
-| TF-043 | 172 | 59 | 66.2 | 74.0 | <1 % |
-| TF-093 | 244 | 85 | 52.7 | 52.3 | <1 % |
-| TF-011 | 83 | 97 | 99.5 | 89.7 | <1 % |
-| TF-088 | 68 | 115 | 117.1 | 108.5 | <1 % |
-| TF-096 | 97 | 137 (125 clipped) | 114.0 | 120.2 | <1 % |
+| TF-034 | 203 | 7 | 7.6 | 5.2 | 2.9 |
+| TF-036 | 126 | 19 | 29.9 | 26.2 | 23.9 |
+| TF-052 | 189 | 29 | 31.3 | 27.4 | 25.1 |
+| TF-043 | 172 | 59 | 74.0 | 66.2 | 63.8 |
+| TF-093 | 244 | 85 | 52.3 | 52.7 | 50.3 |
+| TF-011 | 83 | 97 | 89.7 | 99.5 | 97.2 |
+| TF-088 | 68 | 115 | 108.5 | 117.1 | 114.7 |
+| TF-096 | 97 | 137 (125 clipped) | 120.2 | 114.0 | 111.7 |
 
-Mean absolute error over these eight engines fell from 10.0 to 8.2 cycles. TF-093 is the clearest miss (under estimate by about 33 cycles, the safe direction). This is what real model error looks like and why the UI always shows the typical error beside an estimate.
+Mean absolute error over these eight engines: v1.0 10.0, v1.1 8.2, v1.2 8.3 cycles; v1.2 errs early (the safe side) on 6 of 8 engines. TF-093 is the clearest miss (under estimate by about 33 cycles, the safe direction). This is what real model error looks like and why the UI always shows the typical error beside an estimate.
 
 ## 10. Improving the C-MAPSS model (feature version 1.1.0)
 
@@ -223,5 +223,42 @@ Rule followed: **every choice was made with 5-fold cross validation grouped by e
 
 ### Still open
 
-* RUL is still optimistic near failure (positive bias), the risky direction. Next: a quantile or asymmetric loss, or a bias correction fitted on validation engines.
+* FD002 to FD004 (six operating conditions) need per condition normalisation.
+
+## 11. Round 2: making RUL errors safer (bias correction)
+
+Problem: near failure the RUL models were optimistic (positive bias, more than half of estimates too high). A late estimate is the dangerous one: the engine fails before the predicted time.
+
+Experiment (`ml/experiments/cmapss_bias.py`, training engines only, same 5-fold engine-grouped CV, readings with true RUL < 125):
+
+| Variant | RMSE | Bias | Over-estimates | Late by >10 cycles | NASA score per prediction |
+|---|---|---|---|---|---|
+| Squared error (v1.1) | 9.86 | +1.83 | 58 % | 15.3 % | 1.74 |
+| **Squared error, shift by −2** | **9.70** | −0.15 | 44 % | 12.1 % | 1.53 |
+| Squared error, shift by −4 | 9.93 | −2.11 | 33 % | 9.7 % | 1.45 |
+| Quantile loss, alpha 0.45 / 0.40 / 0.35 | 10.47 / 10.59 / 10.37 | +1.2 / 0.0 / −1.0 | 55 / 51 / 47 % | 16 / 14 / 11 % | 1.77 / 1.72 / 1.56 |
+| Pseudo-Huber loss | 23.7 | — | — | — | (failed to fit well) |
+
+A constant correction equal to the model's average optimism beat every asymmetric loss on every metric. It is now built into training for all RUL models: the selected model's mean residual on **validation** readings with true RUL below the cap is stored in the artifact (`bias_correction`) and subtracted from every prediction. No test data is involved. For C-MAPSS it came out at 2.4 cycles.
+
+### Results, v1.1 → v1.2
+
+| Metric (C-MAPSS) | v1.1 | v1.2 |
+|---|---|---|
+| Held-out engines, near-failure RMSE / MAE | 10.10 / 7.25 | **9.96 / 7.22** |
+| Held-out engines, near-failure bias / over-estimates | +1.80 / 59 % | **-0.56 / 43 %** |
+| Official test RMSE / MAE (100 engines) | 11.65 / 8.51 | 11.80 / 8.79 |
+| Official test NASA score (lower is better, penalises late estimates) | 234.1 | **212.4** (−9 %) |
+| Official test over-estimates | 47 % | 38 % |
+
+| Simulated, near failure | v1.1 RMSE / bias | v1.2 RMSE / bias |
+|---|---|---|
+| Pump | 32.7 h / +17.2 h | **29.5 h / +9.9 h** |
+| Motor | 28.1 h / +10.4 h | **26.5 h / +4.3 h** |
+
+**Trade-off, stated plainly.** On the official C-MAPSS test the RMSE moved from 11.65 to 11.80 (one prediction per engine, within noise) while the late-penalising NASA score improved 9 % and over-estimates dropped from 47 % to 38 %. Every other measure (held-out trajectories, both simulated types) improved on both accuracy and safety. For maintenance planning, an estimate that errs early is the right default.
+
+### Still open
+
+* The pump model is still optimistic on test units (bias +9.9 h): its validation bias was smaller than its test bias. A per-RUL-band correction or a survival model would address it.
 * FD002 to FD004 (six operating conditions) need per condition normalisation.
