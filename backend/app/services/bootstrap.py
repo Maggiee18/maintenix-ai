@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from maintenix_ml.equipment_types import EQUIPMENT_TYPES
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from maintenix_ml.equipment_types import EQUIPMENT_TYPES
 
 from ..core.config import get_settings
 from ..core.security import hash_password, password_problems

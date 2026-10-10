@@ -11,11 +11,12 @@ from datetime import datetime
 from typing import Any
 
 import pandas as pd
-from maintenix_ml.equipment_types import get_spec
-from maintenix_ml.validation import validate_readings
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+
+from maintenix_ml.equipment_types import get_spec
+from maintenix_ml.validation import validate_readings
 
 from ..core.errors import ValidationFailed
 from ..models import entities as m
@@ -106,8 +107,11 @@ def load_window(db: Session, equipment: m.Equipment, n: int, as_of: datetime | N
     return frame.sort_values("timestamp").reset_index(drop=True)
 
 
-def reading_count(db: Session, equipment_id: int) -> int:
-    return db.scalar(select(func.count()).select_from(m.SensorReading).where(m.SensorReading.equipment_id == equipment_id)) or 0
+def reading_count(db: Session, equipment_id: int, as_of: datetime | None = None) -> int:
+    q = select(func.count()).select_from(m.SensorReading).where(m.SensorReading.equipment_id == equipment_id)
+    if as_of is not None:
+        q = q.where(m.SensorReading.recorded_at <= as_of)
+    return db.scalar(q) or 0
 
 
 def latest_reading(db: Session, equipment: m.Equipment) -> dict[str, Any] | None:

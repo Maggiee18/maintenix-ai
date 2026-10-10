@@ -16,8 +16,9 @@ import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 
-from maintenix_ml.simulator import demo_segment
 from sqlalchemy import func, select
+
+from maintenix_ml.simulator import demo_segment
 
 from .core.config import get_settings
 from .core.logging import configure_logging
@@ -146,6 +147,7 @@ def cmd_import_cmapss(a: argparse.Namespace) -> int:
 
     import numpy as np
     import pandas as pd
+
     from maintenix_ml.adapters.cmapss import read_raw, to_canonical
 
     data_dir = Path(a.data_dir)

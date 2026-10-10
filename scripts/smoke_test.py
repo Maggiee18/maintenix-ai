@@ -17,6 +17,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import httpx
+
 from maintenix_ml.equipment_types import get_spec
 from maintenix_ml.simulator import demo_segment
 

@@ -17,7 +17,7 @@ select = ["E", "F", "I", "B", "UP", "S", "BLE"]
 ignore = ["S101", "B008", "S105", "S608", "UP040", "S311", "S104"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S", "E501"]
+"**/tests/**" = ["S", "E501"]
 "alembic/**" = ["E501"]
 
 [tool.mypy]
@@ -25,3 +25,7 @@ python_version = "3.12"
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
 warn_unused_ignores = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["maintenix_ml", "app"]
+known-third-party = ["alembic"]

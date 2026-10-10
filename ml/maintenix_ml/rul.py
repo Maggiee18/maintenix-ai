@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from sklearn.base import clone
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
@@ -39,31 +40,43 @@ class RulBundle:
         return np.clip(self.estimator.predict(X), 0, self.cap)
 
 
-def candidate_regressors(seed: int) -> dict[str, Any]:
+def candidate_regressors(seed: int, xgb_params: dict[str, Any] | None = None) -> dict[str, Any]:
+    xgb = dict(n_estimators=500, max_depth=5, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8)
+    xgb.update(xgb_params or {})
     return {
         "mean_baseline": DummyRegressor(strategy="mean"),
         "ridge": Pipeline([("scale", StandardScaler()), ("reg", Ridge(alpha=1.0))]),
         "random_forest": RandomForestRegressor(n_estimators=150, max_depth=14, min_samples_leaf=5,
                                                n_jobs=-1, random_state=seed),
-        "xgboost": XGBRegressor(n_estimators=500, max_depth=5, learning_rate=0.05, subsample=0.8,
-                                colsample_bytree=0.8, n_jobs=2, random_state=seed, verbosity=0),
+        "xgboost": XGBRegressor(**xgb, n_jobs=2, random_state=seed, verbosity=0),
     }
 
 
 def train_rul_model(
     X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray,
-    feature_names: list[str], cap: float, seed: int,
+    feature_names: list[str], cap: float, seed: int, xgb_params: dict[str, Any] | None = None,
+    refit_on_validation: bool = False,
 ) -> tuple[RulBundle, dict[str, Any]]:
+    """Fit candidates on train, select on validation.
+
+    With ``refit_on_validation`` the selected configuration is fitted again on
+    train + validation (more data, same settings); selection already happened, so
+    the test split stays untouched.
+    """
     yt, yv = np.minimum(y_train, cap), np.minimum(y_val, cap)
     comparison: dict[str, Any] = {}
     fitted: dict[str, Any] = {}
-    for name, model in candidate_regressors(seed).items():
+    for name, model in candidate_regressors(seed, xgb_params).items():
         model.fit(X_train, yt)
         comparison[name] = {"validation": regression_metrics(yv, np.clip(model.predict(X_val), 0, cap))}
         fitted[name] = model
     best = min((k for k in comparison if k != "mean_baseline"), key=lambda k: comparison[k]["validation"]["rmse"])
-    return RulBundle(best, fitted[best], cap, feature_names), {
+    final = fitted[best]
+    if refit_on_validation:
+        final = clone(final).fit(np.vstack([X_train, X_val]), np.concatenate([yt, yv]))
+    return RulBundle(best, final, cap, feature_names), {
         "selected_algorithm": best, "selection_metric": "validation_rmse", "cap_hours": cap,
+        "refit_on_train_and_validation": refit_on_validation, "xgb_params": xgb_params or {},
         "comparison": comparison, "fitted_candidates": fitted,
     }
 

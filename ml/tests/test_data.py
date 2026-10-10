@@ -142,3 +142,34 @@ def test_threshold_and_regression_metrics():
     assert 0.3 < choose_threshold(y, s) <= 0.8
     m = regression_metrics(np.array([10, 20]), np.array([12, 16]))
     assert m["mae"] == 3 and m["rmse"] == pytest.approx(np.sqrt(10))
+
+
+def _turbofan_frame(n: int) -> pd.DataFrame:
+    spec = get_spec("turbofan_engine")
+    t0 = datetime(2025, 1, 1, tzinfo=UTC)
+    rng = np.random.default_rng(0)
+    data = {"unit_id": "E1", "timestamp": [t0 + timedelta(hours=i) for i in range(n)], "operating_mode": "normal"}
+    for s in spec.sensors:
+        data[s.name] = (s.normal_min + s.normal_max) / 2 + rng.normal(0, 0.01, n) + 0.001 * np.arange(n)
+    return pd.DataFrame(data)
+
+
+def test_turbofan_partial_windows_and_age():
+    spec = get_spec("turbofan_engine")
+    cfg = spec.features
+    assert cfg.include_age and cfg.min_history < cfg.long_window
+    df = _turbofan_frame(cfg.min_history)
+    vec = build_window_features(df, spec)
+    assert vec is not None and vec["age__readings"] == cfg.min_history  # usable before a full long window
+    assert build_window_features(df.iloc[:-1], spec) is None
+
+
+def test_window_with_age_offset_matches_full_history():
+    spec = get_spec("turbofan_engine")
+    df = _turbofan_frame(200)
+    full = build_feature_frame(df, spec)
+    names = feature_names(spec)
+    window = df.iloc[-120:]  # what the API would load: the latest readings only
+    vec = build_window_features(window, spec, age_offset=80)
+    np.testing.assert_allclose(vec[names].to_numpy(), full[names].iloc[-1].to_numpy(), rtol=1e-6)  # rolling-sum rounding
+    assert vec["age__readings"] == 200

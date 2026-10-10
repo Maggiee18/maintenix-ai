@@ -37,6 +37,9 @@ log = logging.getLogger("maintenix_ml.train")
 
 DEFAULT_UNITS = {"centrifugal_pump": 60, "electric_motor": 60, "air_compressor": 40}
 RUL_CAP = {"centrifugal_pump": 200.0, "electric_motor": 200.0, "turbofan_engine": 125.0}
+#: XGBoost RUL settings chosen by 5-fold engine-grouped cross validation on the C-MAPSS
+#: training engines (ml/experiments/cmapss_cv.py); other types keep the defaults.
+RUL_XGB_PARAMS: dict[str, dict[str, Any]] = {"turbofan_engine": {"max_depth": 3}}
 
 
 def dataset_fingerprint(df: pd.DataFrame) -> str:
@@ -123,7 +126,8 @@ def train_equipment_type(
         r = has_feat.to_numpy() & frame["gt_rul_hours"].notna().to_numpy()
         yr = frame["gt_rul_hours"].to_numpy(float)
         tr, va, te = (r & in_split[k] for k in ("train", "validation", "test"))
-        rb, rinfo = rul_mod.train_rul_model(X[tr], yr[tr], X[va], yr[va], names, cap, seed)
+        rb, rinfo = rul_mod.train_rul_model(X[tr], yr[tr], X[va], yr[va], names, cap, seed,
+                                            xgb_params=RUL_XGB_PARAMS.get(spec.key), refit_on_validation=True)
         r_eval = rul_mod.evaluate_rul(rb, rinfo.pop("fitted_candidates"), X[te], yr[te])
         for k, v in r_eval.pop("candidates").items():
             rinfo["comparison"][k]["test"] = v

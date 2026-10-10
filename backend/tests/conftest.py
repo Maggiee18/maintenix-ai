@@ -25,12 +25,12 @@ os.environ["MODELS_DIR"] = str(_MODELS)
 os.environ["LOG_LEVEL"] = "WARNING"
 os.environ.pop("BOOTSTRAP_ADMIN_EMAIL", None)
 
+from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from alembic import command  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.db.session import get_engine, get_sessionmaker  # noqa: E402
 
@@ -41,11 +41,17 @@ _DATA_TABLES = ("audit_events", "work_order_events", "maintenance_records", "wor
 
 
 def _train_models() -> None:
+    from maintenix_ml.features import FEATURE_VERSION
     from maintenix_ml.registry import list_metadata
     from maintenix_ml.train import run_simulated
 
-    if {m["equipment_type"] for m in list_metadata(_MODELS)} >= {"electric_motor", "air_compressor"}:
+    metas = list_metadata(_MODELS)
+    current = {m["equipment_type"] for m in metas if m["feature_schema"]["feature_version"] == FEATURE_VERSION}
+    if current >= {"electric_motor", "air_compressor"}:
         return
+    import shutil
+
+    shutil.rmtree(_MODELS, ignore_errors=True)  # stale models from an older feature version
     run_simulated(["electric_motor", "air_compressor"], units=10, seed=7, models_dir=_MODELS)
 
 

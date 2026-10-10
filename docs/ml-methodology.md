@@ -151,16 +151,16 @@ FD001 is the original turbofan degradation dataset: 100 training engines run to 
 
 | Evaluation | Engines | RMSE | MAE | Bias | NASA score |
 |---|---|---|---|---|---|
-| **Official test set** (last cycle of each test engine vs `RUL_FD001.txt`, true RUL clipped at 125) | 95 of 100 | **11.85** | 8.51 | +1.2 | 224.8 |
-| Held-out training engines, readings with true RUL ≤ 125 | 20 | 12.16 | 8.69 | +2.5 | — |
+| **Official test set** (last cycle of each test engine vs `RUL_FD001.txt`, true RUL clipped at 125) | **100 of 100** | **11.65** | 8.51 | +0.5 | 234.1 |
+| Held-out training engines, readings with true RUL ≤ 125 | 20 | 10.10 | 7.25 | +1.8 | — |
 
-Candidates on the held-out engines (validation RMSE → test RMSE near failure): mean baseline 41.6 → 38.6, Ridge 14.4 → 13.7, Random Forest 13.6 → 12.7, **XGBoost 12.4 → 12.2** (selected). For context, published FD001 results are commonly around 16 to 18 RMSE for classical regressors and around 12 to 13 for well tuned deep sequence models; this result was not tuned on the test set, but treat comparisons with care because papers differ in clipping and in how short engines are handled.
+Current model (feature version 1.1.0): XGBoost with depth 3, refitted on training plus validation engines after selection. See section 10 for how it was improved and what each change bought. For context, published FD001 results are commonly around 16 to 18 RMSE for classical regressors and around 12 to 13 for well tuned deep sequence models; this result was not tuned on the test set, but treat comparisons with care because papers differ in clipping and in how short engines are handled.
 
-**Honest caveats.** Five test engines have fewer than 48 cycles, the feature window, and are skipped rather than padded; they are early in life (high RUL), the easier cases, so including them would likely change the score little, but the number above covers 95 engines, not 100. The 125 cycle clip is applied to the ground truth as is standard.
+**Honest caveats.** The 125 cycle clip is applied to the ground truth as is standard. The official test score is a single prediction per engine (100 numbers), so it moves noticeably with small changes; the held-out trajectory metrics use about 2,500 predictions and are the steadier guide.
 
 ### Failure within 30 cycles
 
-Selected XGBoost (validation PR-AUC 0.988). Test engines: precision 0.892, recall 0.967, F1 0.928, PR-AUC 0.981, ROC-AUC 0.993, Brier 0.017 at threshold 0.22 (TN 2494, FP 70, FN 20, TP 580). All 20 held-out failures were warned in advance, median first warning 29 cycles before failure, 27 false alarm readings per 1000 healthy cycles.
+Selected XGBoost. Test engines: precision 0.941, recall 0.962, F1 0.951, PR-AUC 0.986, ROC-AUC 0.994. All 20 held-out failures were warned in advance, median first warning 29 cycles before failure, 12.3 false alarm readings per 1000 healthy cycles (previously 27.3).
 
 ### Anomaly
 
@@ -170,15 +170,58 @@ Baseline = first 20 % of cycles of each training engine. There is no injected gr
 
 `python -m app.cli import-cmapss --engines 8` loads eight official **test** engines (never used in training), spread across the range of true remaining life, as equipment `TF-xxx` with `data_source = imported`. Cycle k is stored at an hourly timestamp so the latest cycle is "now". The command prints the model estimate next to the ground truth; in this build:
 
-| Engine | Cycles seen | True RUL | Predicted RUL | Failure prob. (30 cycles) |
-|---|---|---|---|---|
-| TF-034 | 203 | 7 | 7.6 | >99 % |
-| TF-036 | 126 | 19 | 29.9 | 79 % |
-| TF-052 | 189 | 29 | 31.3 | 28 % |
-| TF-043 | 172 | 59 | 74.0 | <1 % |
-| TF-093 | 244 | 85 | 52.3 | <1 % |
-| TF-011 | 83 | 97 | 89.7 | <1 % |
-| TF-088 | 68 | 115 | 108.5 | <1 % |
-| TF-096 | 97 | 137 (125 clipped) | 120.2 | <1 % |
+| Engine | Cycles seen | True RUL | Predicted RUL (now) | Predicted RUL (before) | Failure prob. (30 cycles) |
+|---|---|---|---|---|---|
+| TF-034 | 203 | 7 | 5.2 | 7.6 | >99 % |
+| TF-036 | 126 | 19 | 26.2 | 29.9 | 89 % |
+| TF-052 | 189 | 29 | 27.4 | 31.3 | 11 % |
+| TF-043 | 172 | 59 | 66.2 | 74.0 | <1 % |
+| TF-093 | 244 | 85 | 52.7 | 52.3 | <1 % |
+| TF-011 | 83 | 97 | 99.5 | 89.7 | <1 % |
+| TF-088 | 68 | 115 | 117.1 | 108.5 | <1 % |
+| TF-096 | 97 | 137 (125 clipped) | 114.0 | 120.2 | <1 % |
 
-TF-093 is the clearest miss (under estimate by about 33 cycles, the safe direction). This is what real model error looks like and why the UI always shows the typical error beside an estimate.
+Mean absolute error over these eight engines fell from 10.0 to 8.2 cycles. TF-093 is the clearest miss (under estimate by about 33 cycles, the safe direction). This is what real model error looks like and why the UI always shows the typical error beside an estimate.
+
+## 10. Improving the C-MAPSS model (feature version 1.1.0)
+
+Rule followed: **every choice was made with 5-fold cross validation grouped by engine on the 100 training engines only** (`ml/experiments/cmapss_cv.py`, results in `ml/experiments/*.json`). The official test set was read once, after all choices were frozen, to report the final number.
+
+### What was tried (CV RMSE on readings with true RUL < 125, lower is better)
+
+| Step | Change | CV RMSE |
+|---|---|---|
+| Baseline | windows 12 / 48 readings, need 48 readings | 11.53 |
+| Partial windows | long-window statistics from 30 readings (covers every test engine; shortest has 31 cycles) | 11.67 |
+| + Age feature | `age__readings`, cycles since the record started (each C-MAPSS record starts with a new engine) | 10.96 |
+| + Exponential smoothing | EWM means, spans 10 and 30 | 11.03 (no gain, dropped) |
+| Window sizes | 12/64 → 10.26, **15/90 → 9.93**, 20/120 → 10.24 | 9.93 |
+| Hyperparameters | 18 XGBoost settings (depth 3/4/6, learning rate and trees, min child weight) | **9.83** with depth 3 (range 9.83 to 10.06, so settings matter little) |
+| Other models | Random Forest 10.56, Extra Trees 10.37, XGBoost + Extra Trees average 9.78 | ensemble gain 0.05 is noise; kept a single, explainable XGBoost |
+| Refit | after selection, refit the chosen model on training + validation engines (80 instead of 60) | — |
+
+### Before → after
+
+| Metric | Before | After |
+|---|---|---|
+| CV RMSE, training engines, near failure | 11.53 | 9.83 |
+| Held-out engines RMSE, near failure (≈2,500 predictions) | 12.16 | **10.10** (−17 %) |
+| Held-out engines MAE, near failure | 8.69 | 7.25 |
+| Official test engines covered | 95 | **100** |
+| Official test RMSE, same 95 engines | 11.85 | 11.80 |
+| Official test RMSE, all 100 engines | n/a | 11.65 |
+| Failure model precision / F1 | 0.892 / 0.928 | 0.941 / 0.951 |
+| False alarms per 1000 healthy cycles | 27.3 | 12.3 |
+
+**Reading this honestly.** The improvement is clear on trajectory-level metrics and for the failure alarms (false alarms more than halved at the same recall). On the official last-cycle score the gain is within noise (11.85 → 11.80 on the same engines); the visible headline gain mostly comes from now covering all 100 engines. I did not iterate further against the official test set, because tuning on it would make the number meaningless.
+
+**Why "age" is legitimate here but not for pumps.** In C-MAPSS every record starts with an engine entering service, so readings since record start is a real, observable quantity. For plant equipment the equivalent would be hours since the last overhaul, which the app tracks (`last_maintenance_at`) but the simulator does not model, so age stays off for those types. The feature is computed identically in training and in the API (the API passes the number of earlier readings as an offset; a unit test checks a 120-reading window with offset 80 matches the full-history features).
+
+**Unchanged for the simulated types.** Pumps, motors and compressors keep their original windows; their failure and anomaly test metrics are byte-identical to the previous version. Their RUL models were refitted on training + validation units: pump near-failure MAE 24.9 → 22.9 h, motor 19.8 → 20.2 h (within noise).
+
+**Upgrade path.** Feature version bumped to 1.1.0. On startup the API retires production models whose feature version no longer matches the running code and promotes the newest compatible version (tested on the dev database: 11 retired, 11 promoted).
+
+### Still open
+
+* RUL is still optimistic near failure (positive bias), the risky direction. Next: a quantile or asymmetric loss, or a bias correction fitted on validation engines.
+* FD002 to FD004 (six operating conditions) need per condition normalisation.

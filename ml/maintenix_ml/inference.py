@@ -16,7 +16,7 @@ from .anomaly import AnomalyBundle
 from .equipment_types import EquipmentTypeSpec
 from .explain import explain_failure
 from .failure import FailureBundle
-from .features import MIN_HISTORY, anomaly_feature_names, build_window_features
+from .features import anomaly_feature_names, build_window_features
 from .rul import RulBundle
 
 
@@ -56,13 +56,14 @@ def predict_window(
     rul: LoadedModel | None,
     explain: bool = True,
     anomaly_threshold_override: float | None = None,
+    age_offset: int = 0,
 ) -> WindowPrediction:
     """``window`` holds one unit's readings ordered by time (latest last)."""
-    vec = build_window_features(window, spec)
+    vec = build_window_features(window, spec, age_offset=age_offset)
     if vec is None:
         return WindowPrediction(status="insufficient_data", readings_used=len(window),
                                 rul_status="insufficient_data" if spec.rul_supported else "unavailable")
-    out = WindowPrediction(status="ok", readings_used=min(len(window), MIN_HISTORY))
+    out = WindowPrediction(status="ok", readings_used=min(len(window), spec.features.long_window))
     x = vec.to_numpy(dtype=float)
 
     if failure is not None:

@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
 import httpx
+
 from maintenix_ml.equipment_types import get_spec
 from maintenix_ml.simulator import simulate_unit
 

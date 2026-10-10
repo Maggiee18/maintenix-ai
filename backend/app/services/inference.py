@@ -6,10 +6,11 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from maintenix_ml.equipment_types import get_spec
-from maintenix_ml.inference import predict_window
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from maintenix_ml.equipment_types import get_spec
+from maintenix_ml.inference import predict_window
 
 from ..core.config import get_settings
 from ..models import entities as m
@@ -73,10 +74,15 @@ def run_for_equipment(
     raise_alerts: bool = True, commit: bool = True, stats: dict[str, int] | None = None,
 ) -> m.PredictionResult | None:
     """Returns None when the equipment has no readings at all."""
-    window = telemetry.load_window(db, equipment, get_settings().prediction_window, as_of)
+    spec = get_spec(equipment.equipment_type.key)
+    # load enough readings for this type's longest window
+    n = max(get_settings().prediction_window, spec.features.long_window + 5)
+    window = telemetry.load_window(db, equipment, n, as_of)
     if window.empty:
         return None
-    spec = get_spec(equipment.equipment_type.key)
+    age_offset = 0
+    if spec.features.include_age:  # readings before the window, so "age" matches training
+        age_offset = telemetry.reading_count(db, equipment.id, as_of) - len(window)
     models = model_cache.production(db, equipment.equipment_type_id)
     th = thresholds_for(db, equipment.equipment_type_id)
 
@@ -89,7 +95,7 @@ def run_for_equipment(
         return entry[0].id if entry else None
 
     result = predict_window(window, spec, loaded("failure"), loaded("anomaly"), loaded("rul"),
-                            anomaly_threshold_override=th.anomaly_score_override if th else None)
+                            anomaly_threshold_override=th.anomaly_score_override if th else None, age_offset=age_offset)
     status = result.status
     if status == "ok" and models["failure"] is None and models["anomaly"] is None:
         status = "no_model"

@@ -29,6 +29,26 @@ class SensorSpec:
 
 
 @dataclass(frozen=True)
+class FeatureConfig:
+    """Window settings for one equipment type (see features.py).
+
+    short_window / long_window: rolling window lengths in readings.
+    min_history: readings needed before features exist; long-window statistics
+        use a partial window until long_window readings are available.
+    include_age: add ``age__readings`` (readings since the record started). Only
+        meaningful when every record starts at a known point, such as a new or
+        overhauled C-MAPSS engine.
+    Chosen for C-MAPSS by 5-fold cross validation on training engines only
+    (ml/experiments/cmapss_cv.py); the defaults are the original settings.
+    """
+
+    short_window: int = 12
+    long_window: int = 48
+    min_history: int = 48
+    include_age: bool = False
+
+
+@dataclass(frozen=True)
 class EquipmentTypeSpec:
     key: str
     display_name: str
@@ -38,6 +58,7 @@ class EquipmentTypeSpec:
     sampling_interval_seconds: int = 3600
     failure_horizon_hours: int = 48
     data_note: str = ""
+    features: FeatureConfig = field(default_factory=FeatureConfig)
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -133,6 +154,7 @@ TURBOFAN_ENGINE = EquipmentTypeSpec(
     rul_supported=True,
     sampling_interval_seconds=3600,  # cycles are mapped to 1 hour for storage; see docs
     failure_horizon_hours=30,
+    features=FeatureConfig(short_window=15, long_window=90, min_history=30, include_age=True),
     data_note="NASA C-MAPSS FD001 (public domain). Cycles are stored as hourly timestamps, so hours below mean flight cycles.",
 )
 

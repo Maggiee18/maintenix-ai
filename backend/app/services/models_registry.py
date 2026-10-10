@@ -8,10 +8,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from maintenix_ml.inference import LoadedModel
-from maintenix_ml.registry import ModelCompatibilityError, check_compatibility, json_safe, list_metadata, load_bundle
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+
+from maintenix_ml.features import FEATURE_VERSION
+from maintenix_ml.inference import LoadedModel
+from maintenix_ml.registry import ModelCompatibilityError, check_compatibility, json_safe, list_metadata, load_bundle
 
 from ..core.config import get_settings
 from ..core.errors import Conflict, NotFound
@@ -59,23 +61,31 @@ def sync_from_disk(db: Session, models_dir: Path | None = None, auto_promote: bo
         ))
         added += 1
     db.flush()
+    retired = 0
     if auto_promote:
         for et in types.values():
             for task in m.MODEL_TASKS:
-                has_prod = db.scalar(select(m.ModelVersion.id).where(
+                prod = db.scalar(select(m.ModelVersion).where(
                     m.ModelVersion.equipment_type_id == et.id, m.ModelVersion.task == task,
                     m.ModelVersion.status == "production"))
-                if has_prod:
+                if prod is not None and prod.feature_version != FEATURE_VERSION:
+                    # the running feature code can no longer serve this model: retire it
+                    prod.status = "archived"
+                    db.flush()
+                    retired += 1
+                    prod = None
+                if prod is not None:
                     continue
                 newest = db.scalars(select(m.ModelVersion).where(
-                    m.ModelVersion.equipment_type_id == et.id, m.ModelVersion.task == task)
+                    m.ModelVersion.equipment_type_id == et.id, m.ModelVersion.task == task,
+                    m.ModelVersion.feature_version == FEATURE_VERSION)
                     .order_by(m.ModelVersion.trained_at.desc()).limit(1)).first()
                 if newest:
                     newest.status = "production"
                     newest.promoted_at = datetime.now(UTC)
                     promoted += 1
     db.commit()
-    return {"added": added, "skipped": skipped, "promoted": promoted}
+    return {"added": added, "skipped": skipped, "promoted": promoted, "retired": retired}
 
 
 def promote(db: Session, model_id: int, actor_id: int, ip: str | None = None) -> m.ModelVersion:

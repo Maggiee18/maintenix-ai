@@ -17,65 +17,81 @@ import pandas as pd
 
 from .equipment_types import OPERATING_MODES, EquipmentTypeSpec
 
-FEATURE_VERSION = "1.0.0"
+FEATURE_VERSION = "1.1.0"
+#: kept for backwards compatibility: the default windows (pumps, motors, compressors)
 SHORT_WINDOW = 12
 LONG_WINDOW = 48
-#: readings needed before a full feature vector exists
 MIN_HISTORY = LONG_WINDOW
+AGE_FEATURE = "age__readings"
+
+
+def min_history(spec: EquipmentTypeSpec) -> int:
+    """Readings needed before a feature vector exists for this type."""
+    return spec.features.min_history
 
 
 def feature_names(spec: EquipmentTypeSpec) -> list[str]:
+    sw, lw = spec.features.short_window, spec.features.long_window
     names: list[str] = []
     for s in spec.sensor_names:
         names += [
             f"{s}__last",
-            f"{s}__mean_{SHORT_WINDOW}",
-            f"{s}__std_{SHORT_WINDOW}",
-            f"{s}__mean_{LONG_WINDOW}",
-            f"{s}__std_{LONG_WINDOW}",
-            f"{s}__min_{LONG_WINDOW}",
-            f"{s}__max_{LONG_WINDOW}",
-            f"{s}__slope_{LONG_WINDOW}",
+            f"{s}__mean_{sw}",
+            f"{s}__std_{sw}",
+            f"{s}__mean_{lw}",
+            f"{s}__std_{lw}",
+            f"{s}__min_{lw}",
+            f"{s}__max_{lw}",
+            f"{s}__slope_{lw}",
             f"{s}__delta_short_long",
         ]
     names += [f"mode__{m}" for m in OPERATING_MODES]
-    names += [f"mode_share_high_load_{LONG_WINDOW}"]
+    names += [f"mode_share_high_load_{lw}"]
+    if spec.features.include_age:
+        names.append(AGE_FEATURE)
     return names
 
 
 def anomaly_feature_names(spec: EquipmentTypeSpec) -> list[str]:
-    """Short-horizon subset used by the anomaly detector."""
+    """Short-horizon subset used by the anomaly detector (never includes age)."""
+    sw = spec.features.short_window
     names: list[str] = []
     for s in spec.sensor_names:
-        names += [f"{s}__last", f"{s}__mean_{SHORT_WINDOW}", f"{s}__std_{SHORT_WINDOW}"]
+        names += [f"{s}__last", f"{s}__mean_{sw}", f"{s}__std_{sw}"]
     names += [f"mode__{m}" for m in OPERATING_MODES]
     return names
 
 
 def sensor_of(feature: str) -> str:
-    """Map a feature name back to its sensor (or 'operating_mode')."""
+    """Map a feature name back to its sensor (or 'operating_mode' / 'age')."""
+    if feature == AGE_FEATURE:
+        return "age"
     return feature.split("__", 1)[0] if "__" in feature and not feature.startswith("mode") else "operating_mode"
 
 
-def _rolling_slope(y: pd.Series, groups: pd.Series, window: int) -> pd.Series:
-    # slope of y against reading index within each window: cov(i, y) / var(i)
+def _rolling_slope(y: pd.Series, groups: pd.Series, window: int, min_periods: int) -> pd.Series:
+    # least-squares slope of y against reading index in each (possibly partial) window: cov(i, y) / var(i)
     i = groups.groupby(groups).cumcount().astype(float)
-    g = y.groupby(groups)
-    mean_y = g.transform(lambda s: s.rolling(window, min_periods=window).mean())
-    iy = (i * y).groupby(groups).transform(lambda s: s.rolling(window, min_periods=window).mean())
-    mean_i = i.groupby(groups).transform(lambda s: s.rolling(window, min_periods=window).mean())
-    var_i = (window**2 - 1) / 12.0
-    return (iy - mean_i * mean_y) / var_i
+
+    def roll_mean(v: pd.Series) -> pd.Series:
+        return v.groupby(groups).transform(lambda s: s.rolling(window, min_periods=min_periods).mean())
+
+    n = y.groupby(groups).transform(lambda s: s.rolling(window, min_periods=min_periods).count())
+    var_i = (n**2 - 1) / 12.0
+    return (roll_mean(i * y) - roll_mean(i) * roll_mean(y)) / var_i
 
 
 def build_feature_frame(
-    df: pd.DataFrame, spec: EquipmentTypeSpec, id_column: str = "unit_id"
+    df: pd.DataFrame, spec: EquipmentTypeSpec, id_column: str = "unit_id", age_offset: int = 0,
 ) -> pd.DataFrame:
     """Return one feature row per input row (NaN until enough history exists).
 
     ``df`` must contain ``id_column``, ``timestamp``, ``operating_mode`` and the
-    spec's sensors. The returned frame keeps the input index order.
+    spec's sensors. ``age_offset`` is the number of earlier readings of the unit
+    that are not in ``df`` (used when scoring a window of a longer record).
     """
+    cfg = spec.features
+    sw, lw, mh = cfg.short_window, cfg.long_window, cfg.min_history
     data = df.sort_values([id_column, "timestamp"]).reset_index(drop=True)
     groups = data[id_column]
     feats: dict[str, pd.Series] = {}
@@ -83,26 +99,27 @@ def build_feature_frame(
         y = data[s].astype(float)
         g = y.groupby(groups)
 
-        def roll(w: int, fn: str, g=g) -> pd.Series:
-            return g.transform(lambda x: getattr(x.rolling(w, min_periods=w), fn)())
+        def roll(w: int, fn: str, mp: int, g=g) -> pd.Series:
+            return g.transform(lambda x: getattr(x.rolling(w, min_periods=mp), fn)())
 
         feats[f"{s}__last"] = y
-        feats[f"{s}__mean_{SHORT_WINDOW}"] = roll(SHORT_WINDOW, "mean")
-        feats[f"{s}__std_{SHORT_WINDOW}"] = roll(SHORT_WINDOW, "std")
-        feats[f"{s}__mean_{LONG_WINDOW}"] = roll(LONG_WINDOW, "mean")
-        feats[f"{s}__std_{LONG_WINDOW}"] = roll(LONG_WINDOW, "std")
-        feats[f"{s}__min_{LONG_WINDOW}"] = roll(LONG_WINDOW, "min")
-        feats[f"{s}__max_{LONG_WINDOW}"] = roll(LONG_WINDOW, "max")
-        feats[f"{s}__slope_{LONG_WINDOW}"] = _rolling_slope(y, groups, LONG_WINDOW)
-        feats[f"{s}__delta_short_long"] = feats[f"{s}__mean_{SHORT_WINDOW}"] - feats[f"{s}__mean_{LONG_WINDOW}"]
+        feats[f"{s}__mean_{sw}"] = roll(sw, "mean", min(sw, mh))
+        feats[f"{s}__std_{sw}"] = roll(sw, "std", min(sw, mh))
+        feats[f"{s}__mean_{lw}"] = roll(lw, "mean", mh)
+        feats[f"{s}__std_{lw}"] = roll(lw, "std", mh)
+        feats[f"{s}__min_{lw}"] = roll(lw, "min", mh)
+        feats[f"{s}__max_{lw}"] = roll(lw, "max", mh)
+        feats[f"{s}__slope_{lw}"] = _rolling_slope(y, groups, lw, mh)
+        feats[f"{s}__delta_short_long"] = feats[f"{s}__mean_{sw}"] - feats[f"{s}__mean_{lw}"]
 
     modes = data["operating_mode"].astype(str)
     for m in OPERATING_MODES:
         feats[f"mode__{m}"] = (modes == m).astype(float)
     hl = (modes == "high_load").astype(float)
-    feats[f"mode_share_high_load_{LONG_WINDOW}"] = hl.groupby(groups).transform(
-        lambda x: x.rolling(LONG_WINDOW, min_periods=LONG_WINDOW).mean()
-    )
+    feats[f"mode_share_high_load_{lw}"] = hl.groupby(groups).transform(lambda x: x.rolling(lw, min_periods=mh).mean())
+    if cfg.include_age:
+        age = (groups.groupby(groups).cumcount() + 1 + age_offset).astype(float)
+        feats[AGE_FEATURE] = age.where(age >= mh)
     out = pd.DataFrame(feats)[feature_names(spec)]
     out.insert(0, "timestamp", data["timestamp"].to_numpy())
     out.insert(0, id_column, groups.to_numpy())
@@ -113,16 +130,21 @@ def build_feature_frame(
     return out
 
 
-def build_window_features(window: pd.DataFrame, spec: EquipmentTypeSpec) -> pd.Series | None:
+def build_window_features(window: pd.DataFrame, spec: EquipmentTypeSpec, age_offset: int = 0) -> pd.Series | None:
     """Feature vector for the most recent reading of a single unit's window.
 
-    Returns ``None`` when fewer than ``MIN_HISTORY`` readings are available.
+    ``age_offset``: readings of this unit recorded before ``window`` (only used
+    by types with ``include_age``). Returns ``None`` when the window holds fewer
+    than the type's ``min_history`` readings.
     """
-    if len(window) < MIN_HISTORY:
+    cfg = spec.features
+    if len(window) < cfg.min_history:
         return None
     w = window.copy()
     w["_unit"] = "u"
-    frame = build_feature_frame(w.tail(MIN_HISTORY + 5), spec, id_column="_unit")
+    keep = cfg.long_window + 5
+    dropped = max(len(w) - keep, 0)
+    frame = build_feature_frame(w.tail(keep), spec, id_column="_unit", age_offset=age_offset + dropped)
     row = frame.iloc[-1]
     vec = row[feature_names(spec)].astype(float)
     if vec.isna().any():

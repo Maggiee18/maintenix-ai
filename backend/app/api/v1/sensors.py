@@ -5,10 +5,11 @@ from typing import Any, Literal
 
 import pandas as pd
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
-from maintenix_ml.adapters.canonical_csv import CanonicalCsvAdapter
-from maintenix_ml.equipment_types import get_spec
 from pydantic import AwareDatetime
 from sqlalchemy import func, select
+
+from maintenix_ml.adapters.canonical_csv import CanonicalCsvAdapter
+from maintenix_ml.equipment_types import get_spec
 
 from ...core.config import get_settings
 from ...core.errors import AppError, ValidationFailed
