@@ -84,3 +84,17 @@ def test_rul_time_unit_per_type():
 
     assert time_unit("turbofan_engine") == "cycles"
     assert time_unit("centrifugal_pump") == "h"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("http://localhost:8080", ["http://localhost:8080"]),
+    ("http://a.example, http://b.example", ["http://a.example", "http://b.example"]),
+    ('["http://a.example","http://b.example"]', ["http://a.example", "http://b.example"]),
+])
+def test_cors_origins_from_environment(monkeypatch, raw, expected):
+    # Regression: a plain comma separated CORS_ORIGINS (as in docker-compose and .env.example) crashed startup.
+    from app.core.config import Settings
+
+    monkeypatch.setenv("CORS_ORIGINS", raw)
+    s = Settings(database_url="postgresql+psycopg://u:p@h/db", jwt_secret="x" * 32, _env_file=None)
+    assert s.cors_origins == expected

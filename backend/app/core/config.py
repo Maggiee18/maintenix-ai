@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _INSECURE_SECRETS = {"", "change-me", "changeme", "secret", "dev-secret-change-me"}
 
@@ -26,7 +27,8 @@ class Settings(BaseSettings):
     jwt_algorithm: Literal["HS256"] = "HS256"
     jwt_expire_minutes: int = Field(60, ge=5, le=24 * 60)
 
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:8080"]
+    # NoDecode: read the raw string so a comma separated value works (the validator below splits it).
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173", "http://localhost:8080"]
 
     models_dir: Path = Path("models")
     prediction_window: int = Field(60, ge=48, le=500)
@@ -42,7 +44,9 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:
-        if isinstance(v, str) and not v.strip().startswith("["):
+        if isinstance(v, str):
+            if v.strip().startswith("["):
+                return json.loads(v)
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
